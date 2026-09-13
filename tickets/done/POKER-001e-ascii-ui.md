@@ -117,5 +117,21 @@ single-row letterspaced `.banner-compact`; `data-banner-mode="compact|full"` mir
 
 ## Done checklist
 
-- [ ] AC1–AC12 ticked · tests green (incl. the falsification run) · worktree removed, merged, pushed
-- [ ] Ticket moved to `tickets/done/` with `git mv`
+- [x] AC1–AC12 ticked · tests green (incl. the falsification run) · worktree removed, merged, pushed
+- [x] Ticket moved to `tickets/done/` with `git mv`
+
+---
+
+## Verification & landing (coordinator, 2026-09-13)
+
+**Landed on `main`:** merge of `poker/e-ascii-ui` (`e987bcb`, merge commit `fffb7fa`), pushed, and redeployed to g2 (`git reset --hard origin/main`). Coordinator gates, run on `main`:
+
+- `npm test` → **108 tests / 12 suites / 0 fail**.
+- `npm run test:e2e` → **16 passed / 1 skipped (the gated live smoke) / 0 failed** in 13.6 s, one worker — the landed 9 specs stayed green and the 7 new presentation specs all pass, printing the measured AC10 ratios for both themes.
+- **Live origin:** the coordinator's browser check (`banner-live.mjs`, Chromium against `https://poker.imre.dev`) → **all PASS**: the banner renders as a `<pre>` with **exactly 5 rows of equal width (29 chars each)**, contains real box-drawing glyphs (so the generated font is genuinely applied), `data-banner-mode="full"`, the stylesheet is applied, and there are **zero console, page or failed-request errors** — which also proves the symlinked font module parses as browser JavaScript.
+- **Assets through the Cloudflare tunnel:** `/style.css` → 200 `text/css`, `/asciiFont.js` → 200 `text/javascript`, `/app.js` + `/leakguard.js` → 200.
+- Full live harness re-run: **27/27** checks still pass against the deployed origin.
+
+**The one delivery decision, reviewed and accepted:** `public/asciiFont.js` is a **relative symlink to `../lib/asciiFont.ts`** (git mode `120000`). Rationale: the ticket requires the font table and renderer to stay in **one** module that the client imports directly with no build step, but `server.ts` (owned by `001a`) serves only `public/`. The target file contains **no TypeScript-only syntax** (checked: no annotations/interfaces), so Node type-stripping is a no-op and the browser parses it as plain ESM. Verified end to end on g2: the symlink survives `git checkout`, is served as `text/javascript`, and renders with no errors. This is recorded as a deliberate deviation; the alternative (a copied file plus a drift test) was rejected as the worse duplication.
+
+**Note on a transient observed during deployment:** `GET /style.css` briefly returned a connection reset (curl `000`) immediately after the pull — that was PM2's `watch: ["server.ts","lib"]` restarting the app because this deploy changed `lib/asciiFont.ts` (PM2 `restart_time: 1`). Once settled, every asset served 200. Not a defect; worth knowing for future deploys that touch `lib/`.
