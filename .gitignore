@@ -1,0 +1,23 @@
+# runtime state — one JSON file per room lives here (POKER-001 §1.1)
+data/
+
+# project-local PM2 daemon
+.pm2/
+
+# Playwright browsers (the default ~/.cache is not usable here)
+.pw-browsers/
+test-results/
+playwright-report/
+
+# project-local npm cache
+.npm-cache/
+
+# per-machine secrets — never committed (the app has no auth by design)
+.env
+.env.local
+.cloudflared/
+
+# editor / OS noise
+.DS_Store
+*.log
+node_modules/
