@@ -98,6 +98,8 @@ const skippedReveals = new Set();
 const REVEAL_ANIMATION_MS = 2000;
 // POKER-006: how long a silent claim may take before the form is revealed anyway.
 const AUTO_CLAIM_GRACE_MS = 2500;
+// POKER-008: how often an open tab checks whether it has been superseded.
+const BUILD_POLL_MS = 60_000;
 
 // ---------------------------------------------------------------------------
 // dom
@@ -1162,7 +1164,56 @@ window.__pokerTest = {
   session: () => state.you.session,
   room: () => state.roomCode,
   myRooms: () => readMyRooms(storage),
+  // POKER-008: the self-update probe, so the e2e can drive it deterministically.
+  checkBuild: () => checkBuild(),
 };
+
+// ---------------------------------------------------------------------------
+// self-update (POKER-008)
+// ---------------------------------------------------------------------------
+//
+// A tab left open across a deploy keeps its old modules forever (the socket
+// reconnects; the page does not reload). The server stamps its client assets on
+// /api/health, so this page can notice it has been superseded and reload itself.
+// A reload is safe: rooms, votes, the claimed name and the viewer's own ballot
+// all live server-side or in localStorage.
+
+let knownBuild = null;
+try {
+  knownBuild = window.sessionStorage.getItem("poker.build");
+} catch {
+  knownBuild = null;
+}
+
+function rememberBuild(value) {
+  knownBuild = value;
+  try {
+    window.sessionStorage.setItem("poker.build", value);
+  } catch {
+    /* storage unavailable — the in-memory value still guards this page */
+  }
+}
+
+async function checkBuild() {
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json();
+    const build = typeof body?.build === "string" ? body.build : "";
+    if (build === "") return;
+    if (knownBuild === null) {
+      rememberBuild(build);
+      return;
+    }
+    if (build !== knownBuild) {
+      // Store it FIRST: the reloaded page then compares equal and cannot loop.
+      rememberBuild(build);
+      window.location.reload();
+    }
+  } catch {
+    /* offline — the next tick tries again */
+  }
+}
 
 // ---------------------------------------------------------------------------
 // boot
@@ -1177,3 +1228,11 @@ setConnection("closed");
 renderStaticBanners();
 applyBannerMode();
 applyRoute();
+
+// POKER-008: keep an open tab from running a superseded client.
+void checkBuild();
+setInterval(() => void checkBuild(), BUILD_POLL_MS);
+window.addEventListener("focus", () => void checkBuild());
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) void checkBuild();
+});

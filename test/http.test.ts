@@ -20,6 +20,9 @@ test("GET /api/health reports ok/version/rooms/connections/uptime", async () => 
     assert.equal(typeof body.connections, "number");
     assert.equal(typeof body.uptime, "number");
     assert.equal(body.connections, 0);
+    // POKER-008: a non-empty client build stamp for the self-update watchdog.
+    assert.equal(typeof body.build, "string");
+    assert.ok(body.build.length > 0, "health carries a build stamp");
 
     await createRoom(server, { title: "Counted" });
     const withRoom = (await (await fetch(`${server.base}/api/health`)).json()) as any;

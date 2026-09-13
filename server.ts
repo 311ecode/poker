@@ -115,6 +115,9 @@ export function createPokerServer(options: PokerServerOptions = {}): PokerServer
         uptime: Math.floor((Date.now() - startedAt) / 1000),
         // Extra: corrupt room files are reported, never hidden (001b AC5).
         corrupt: stats.corrupt,
+        // POKER-008: the client-side build stamp — the newest mtime among the
+        // served assets, so an open tab can notice a redeploy and reload itself.
+        build: await assetBuild(publicDir),
       });
       return;
     }
@@ -434,8 +437,28 @@ function rejectUpgrade(socket: Socket, status: number, text: string): void {
   }
 }
 
-async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
+/**
+ * POKER-008: a stamp for the served client assets — the newest mtime in
+ * `public/`. It changes on a client deploy even when the server is not
+ * restarted, so an open tab can detect that it is stale and reload. Never
+ * throws: an unreadable directory is simply an empty stamp.
+ */
+async function assetBuild(dir: string): Promise<string> {
+  try {
+    const entries = await fsp.readdir(dir, { withFileTypes: true });
+    let newest = 0;
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const stat = await fsp.stat(path.join(dir, entry.name));
+      if (stat.mtimeMs > newest) newest = stat.mtimeMs;
+    }
+    return newest > 0 ? String(Math.round(newest)) : "";
+  } catch {
+    return "";
+  }
+}
+
+async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {  const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
