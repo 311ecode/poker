@@ -25,13 +25,18 @@ export interface RoomMeta {
 /** POST /api/rooms (parent §1.5) and return its metadata. */
 export async function createRoomViaApi(
   request: APIRequestContext,
-  input: { title: string; public?: boolean; passcode?: string },
+  input: { title: string; public?: boolean; passcode?: string; test?: boolean },
 ): Promise<RoomMeta> {
   const response = await request.post("/api/rooms", { data: input });
   expect(response.ok(), `POST /api/rooms -> ${response.status()}`).toBeTruthy();
   const body = (await response.json()) as { room: RoomMeta };
   expect(body.room.code).toMatch(/^[A-Z0-9]{6}$/);
   return body.room;
+}
+
+/** POKER-013: delete one room; the server requires the explicit confirm header. */
+export async function deleteRoomViaApi(request: APIRequestContext, code: string): Promise<void> {
+  await request.delete(`/api/rooms/${code}`, { headers: { "x-poker-confirm": "delete" } });
 }
 
 // ---------------------------------------------------------------------------

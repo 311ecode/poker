@@ -164,6 +164,8 @@ export interface Room {
   createdAt: number;
   members: Member[];
   votes: Vote[];
+  /** POKER-013: created by tests/automation — safe to bulk-delete by scope. */
+  test?: boolean;
 }
 
 /** What a caller supplies to `create()`; only `title` is required. */
@@ -175,6 +177,8 @@ export interface CreateRoomInput {
   createdAt?: number;
   members?: Member[];
   votes?: Vote[];
+  /** POKER-013: mark this room as test data. */
+  test?: boolean;
 }
 
 /** `list()` projection of one public room (AC7) — never the hash. */
@@ -396,6 +400,9 @@ export function validateRoom(value: unknown): string[] {
   if (value.passcodeHash !== null && typeof value.passcodeHash !== "string") {
     issues.push("passcodeHash must be a string or null");
   }
+  if (value.test !== undefined && typeof value.test !== "boolean") {
+    issues.push("test must be a boolean when present");
+  }
   if (!isFiniteNumber(value.createdAt)) issues.push("createdAt must be a finite number");
 
   if (!Array.isArray(value.members)) {
@@ -498,6 +505,8 @@ export interface Db {
   get(code: string): Promise<Room | null>;
   /** Public rooms (projected) plus a report of corrupt files. */
   list(): Promise<RoomListing>;
+  /** Every room code on disk, public or not (admin reset, POKER-013). */
+  listCodes(): Promise<string[]>;
   /** Create a room (generating a code when none is given). */
   create(input: CreateRoomInput): Promise<Room>;
   /** The only path that changes an existing room. */
@@ -654,8 +663,25 @@ export function openDb(options: OpenDbOptions = {}): Db {
     return { rooms, corrupt: { count: corruptNames.length, names: corruptNames } };
   }
 
+  /**
+   * POKER-013: every room code on disk — public or not — for the admin reset.
+   * Unlike `list()` this is not a projection and does not read room contents.
+   */
+  async function listCodes(): Promise<string[]> {
+    try {
+      const entries = await readdir(roomsDir, { withFileTypes: true });
+      return entries
+        .filter((entry) => entry.isFile() && ROOM_FILE_PATTERN.test(entry.name))
+        .map((entry) => entry.name.slice(0, ROOM_CODE_LENGTH))
+        .sort();
+    } catch (error) {
+      if (isErrno(error, "ENOENT")) return [];
+      throw error;
+    }
+  }
+
   function buildRoom(code: string, input: CreateRoomInput): Room {
-    return {
+    const room: Room = {
       code,
       title: input.title,
       public: input.public ?? true,
@@ -664,6 +690,9 @@ export function openDb(options: OpenDbOptions = {}): Db {
       members: structuredClone(input.members ?? []),
       votes: structuredClone(input.votes ?? []),
     };
+    // Only written when set, so ordinary rooms keep the frozen §1.1 shape.
+    if (input.test === true) room.test = true;
+    return room;
   }
 
   async function create(input: CreateRoomInput): Promise<Room> {
@@ -774,5 +803,5 @@ export function openDb(options: OpenDbOptions = {}): Db {
     return room.votes.map((vote) => projectVote(vote, room.members));
   }
 
-  return { dir, roomsDir, get, list, create, mutate, remove, history };
+  return { dir, roomsDir, get, list, listCodes, create, mutate, remove, history };
 }

@@ -371,6 +371,8 @@ export class Hub {
     title: unknown;
     public?: unknown;
     passcode?: unknown;
+    /** POKER-013: mark the room as test data. */
+    test?: unknown;
   }): Promise<HubResult<{ room: Room }>> {
     if (typeof input.title !== "string") return { ok: false, code: "bad_title" };
     const title = input.title.trim();
@@ -387,8 +389,72 @@ export class Hub {
       title,
       public: input.public !== false,
       passcodeHash,
+      test: input.test === true,
     });
     return { ok: true, room };
+  }
+
+  // -- admin: delete + reset (POKER-013) ------------------------------------
+
+  /** Delete one room and disconnect anyone sitting in it. */
+  async deleteRoom(code: unknown): Promise<boolean> {
+    const normalized = normalizeCode(code);
+    if (!normalized) return false;
+    const removed = await this.db.remove(normalized);
+    if (removed) this.dropPeers(normalized);
+    return removed;
+  }
+
+  /**
+   * The rooms a reset with `scope` would delete:
+   * - `all`  — every room file;
+   * - `test` — rooms flagged `test`, plus legacy live-smoke rooms (`live-…`
+   *            titles) from before the flag existed.
+   * A corrupt file cannot be inspected, so only `all` removes it.
+   */
+  private async resetCandidates(scope: "all" | "test"): Promise<string[]> {
+    const codes = await this.db.listCodes();
+    if (scope === "all") return codes;
+    const doomed: string[] = [];
+    for (const code of codes) {
+      let room: Room | null = null;
+      try {
+        room = await this.db.get(code);
+      } catch {
+        continue; // corrupt — leave it for an explicit full reset
+      }
+      if (room && (room.test === true || /^live-/i.test(room.title))) doomed.push(code);
+    }
+    return doomed;
+  }
+
+  /** How many rooms each scope covers, for the confirmation page. */
+  async resetCounts(): Promise<{ all: number; test: number }> {
+    return { all: (await this.db.listCodes()).length, test: (await this.resetCandidates("test")).length };
+  }
+
+  /** Delete every room the scope covers; returns how many went. */
+  async resetData(scope: "all" | "test"): Promise<{ deleted: number; scope: string }> {
+    const doomed = await this.resetCandidates(scope);
+    let deleted = 0;
+    for (const code of doomed) {
+      if (await this.db.remove(code)) {
+        deleted += 1;
+        this.dropPeers(code);
+      }
+    }
+    return { deleted, scope };
+  }
+
+  /** Disconnect and forget every peer in a room that no longer exists. */
+  private dropPeers(code: string): void {
+    const peers = [...(this.byRoom.get(code) ?? [])];
+    this.byRoom.delete(code);
+    for (const peer of peers) {
+      this.peers.delete(peer.id);
+      peer.room = null;
+      peer.close();
+    }
   }
 
   /** AC9: public rooms only, projected, never a passcode. */

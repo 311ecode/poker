@@ -199,3 +199,89 @@ test("static files are served with Cache-Control: no-cache", async () => {
     await fs.rm(publicDir, { recursive: true, force: true });
   }
 });
+
+test("POKER-013: DELETE /api/rooms/:code removes one room and requires the confirm header", async () => {
+  const server = await startServer();
+  try {
+    const room = await createRoom(server, { title: "Doomed" });
+
+    // No confirm header → refused, and the room survives.
+    const unconfirmed = await fetch(`${server.base}/api/rooms/${room.code}`, { method: "DELETE" });
+    assert.equal(unconfirmed.status, 403);
+    assert.notEqual(await server.db.get(room.code), null);
+
+    // Confirmed → gone.
+    const deleted = await fetch(`${server.base}/api/rooms/${room.code}`, {
+      method: "DELETE",
+      headers: { "x-poker-confirm": "delete" },
+    });
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(await deleted.json(), { deleted: room.code });
+    assert.equal(await server.db.get(room.code), null);
+
+    // Unknown room → 404.
+    const missing = await fetch(`${server.base}/api/rooms/ZZZZZZ`, {
+      method: "DELETE",
+      headers: { "x-poker-confirm": "delete" },
+    });
+    assert.equal(missing.status, 404);
+  } finally {
+    await server.stop();
+  }
+});
+
+test("POKER-013: /resetdata is side-effect free on GET and scoped on POST", async () => {
+  const server = await startServer();
+  try {
+    const real = await createRoom(server, { title: "Real room" });
+    const flaggedResponse = await fetch(`${server.base}/api/rooms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "flagged test room", test: true }),
+    });
+    const flagged = ((await flaggedResponse.json()) as any).room.code as string;
+    const legacy = await createRoom(server, { title: "live-smoke-legacy" });
+
+    // The flag round-trips onto the room file.
+    assert.equal((await server.db.get(flagged))?.test, true);
+
+    // GET changes nothing and reports the counts.
+    const page = await fetch(`${server.base}/resetdata`);
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /Rooms on disk: <strong>3<\/strong>/);
+    assert.match(html, /Test rooms: <strong>2<\/strong>/);
+    assert.notEqual(await server.db.get(real.code), null, "a GET must not delete");
+
+    // POST without the confirm field is refused.
+    const unconfirmed = await fetch(`${server.base}/resetdata`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "scope=all",
+    });
+    assert.equal(unconfirmed.status, 400);
+
+    // scope=test removes the flagged room and the legacy live-* room only.
+    const scoped = await fetch(`${server.base}/resetdata`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: "confirm=RESET&scope=test",
+    });
+    assert.equal(scoped.status, 200);
+    assert.deepEqual(await scoped.json(), { ok: true, deleted: 2, scope: "test" });
+    assert.notEqual(await server.db.get(real.code), null, "the real room survives a scoped reset");
+    assert.equal(await server.db.get(flagged), null);
+    assert.equal(await server.db.get(legacy.code), null);
+
+    // scope=all removes everything left.
+    const all = await fetch(`${server.base}/resetdata`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: "confirm=RESET&scope=all",
+    });
+    assert.deepEqual(await all.json(), { ok: true, deleted: 1, scope: "all" });
+    assert.equal(await server.db.get(real.code), null);
+  } finally {
+    await server.stop();
+  }
+});

@@ -130,7 +130,7 @@ export function createPokerServer(options: PokerServerOptions = {}): PokerServer
       if (method === "POST") {
         let body: Record<string, unknown>;
         try {
-          body = (await readJsonBody(req)) as Record<string, unknown>;
+          body = await readRequestBody(req);
         } catch (error) {
           sendJson(res, 400, { error: error instanceof Error ? error.message : "Invalid body" });
           return;
@@ -139,6 +139,8 @@ export function createPokerServer(options: PokerServerOptions = {}): PokerServer
           title: body.title,
           public: body.public,
           passcode: body.passcode,
+          // POKER-013: tests mark their rooms so `scope=test` can sweep them.
+          test: body.test,
         });
         if (!result.ok) {
           sendJson(res, 400, { error: result.code });
@@ -171,12 +173,92 @@ export function createPokerServer(options: PokerServerOptions = {}): PokerServer
       return;
     }
 
+    // POKER-013: delete one room. Guarded by an explicit confirm header (and the
+    // admin token when configured) — this is a destructive, unauthenticated-by-
+    // default surface, so it must never fire from a stray GET/prefetch.
+    if (method === "DELETE" && roomMatch) {
+      const confirmed = String(req.headers["x-poker-confirm"] ?? "") === "delete";
+      if (!confirmed || !adminTokenAllowed(req)) {
+        sendJson(res, 403, { error: "forbidden" });
+        return;
+      }
+      const code = decodeURIComponent(roomMatch[1]!);
+      const deleted = await hub.deleteRoom(code);
+      if (!deleted) {
+        sendJson(res, 404, { error: "No such room" });
+        return;
+      }
+      sendJson(res, 200, { deleted: code.toUpperCase() });
+      return;
+    }
+
+    if (pathname === "/resetdata") {
+      await handleResetData(req, res, url);
+      return;
+    }
+
     if (method === "GET" || method === "HEAD") {
       await serveStatic(res, pathname, method === "HEAD");
       return;
     }
 
     sendJson(res, 404, { error: "Not found" });
+  }
+
+  // -- admin data reset (POKER-013) -----------------------------------------
+
+  /**
+   * `GET /resetdata` is deliberately side-effect free: it reports what exists and
+   * offers buttons. `POST /resetdata` needs `confirm=RESET` and a `scope`
+   * (`all` | `test`); with `POKER_ADMIN_TOKEN` set it also needs that token.
+   */
+  async function handleResetData(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    url: URL,
+  ): Promise<void> {
+    if (req.method === "GET" || req.method === "HEAD") {
+      const counts = await hub.resetCounts();
+      const html = resetPage(counts, url.pathname);
+      sendHtml(res, 200, html, req.method === "HEAD");
+      return;
+    }
+    if (req.method !== "POST") {
+      sendJson(res, 405, { error: "method not allowed" });
+      return;
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await readRequestBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: error instanceof Error ? error.message : "Invalid body" });
+      return;
+    }
+    if (!adminTokenAllowed(req, body)) {
+      sendJson(res, 403, { error: "forbidden" });
+      return;
+    }
+    if (body.confirm !== "RESET") {
+      sendJson(res, 400, { error: "confirmation required" });
+      return;
+    }
+    const scope = body.scope === "all" ? "all" : "test";
+    const result = await hub.resetData(scope);
+    console.log(`[poker] resetdata scope=${scope} deleted=${result.deleted}`);
+    if (wantsJson(req)) {
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+    sendHtml(
+      res,
+      200,
+      `<!doctype html><meta charset="utf-8"><title>poker — reset done</title>
+<body style="font-family:monospace;max-width:40rem;margin:2rem auto">
+<h1>Deleted ${result.deleted} room(s)</h1>
+<p>Scope: <strong>${scope}</strong>.</p>
+<p><a href="/resetdata">back</a> · <a href="/">home</a></p>`,
+    );
   }
 
   async function serveStatic(
@@ -496,7 +578,9 @@ export function versionAssetUrls(text: string, ext: string, build: string): stri
   );
 }
 
-async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {  const chunks: Buffer[] = [];
+/** Read a request body as a plain object: JSON, or a form post (POKER-013). */
+async function readRequestBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
@@ -505,11 +589,38 @@ async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {  cons
   }
   const raw = Buffer.concat(chunks).toString("utf8");
   if (raw.trim() === "") return {};
+  const type = String(req.headers["content-type"] ?? "");
+  if (type.includes("application/x-www-form-urlencoded")) {
+    return Object.fromEntries(new URLSearchParams(raw));
+  }
+  let parsed: unknown;
   try {
-    return JSON.parse(raw);
+    parsed = JSON.parse(raw);
   } catch {
     throw new Error("Invalid JSON body");
   }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("Invalid body");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+/** POKER-013: the optional gate for destructive endpoints. */
+const ADMIN_TOKEN = (process.env.POKER_ADMIN_TOKEN ?? "").trim();
+
+/**
+ * POKER-013: destructive requests are allowed when no admin token is configured
+ * (they still need their explicit confirm marker). Setting `POKER_ADMIN_TOKEN`
+ * locks them down: the caller must then send that token.
+ */
+function adminTokenAllowed(req: http.IncomingMessage, body?: Record<string, unknown>): boolean {
+  if (ADMIN_TOKEN === "") return true;
+  const provided = String(req.headers["x-poker-token"] ?? body?.token ?? "");
+  return provided !== "" && provided === ADMIN_TOKEN;
+}
+
+function wantsJson(req: http.IncomingMessage): boolean {
+  return String(req.headers.accept ?? "").includes("application/json");
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
@@ -519,6 +630,64 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
     "Content-Length": Buffer.byteLength(raw),
   });
   res.end(raw);
+}
+
+function sendHtml(
+  res: http.ServerResponse,
+  status: number,
+  html: string,
+  headOnly = false,
+): void {
+  res.writeHead(status, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Length": Buffer.byteLength(html),
+    "Cache-Control": "no-store",
+  });
+  res.end(headOnly ? undefined : html);
+}
+
+/** The `/resetdata` confirmation page — side-effect free, buttons only. */
+function resetPage(counts: { all: number; test: number }, pathname: string): string {
+  const tokenField =
+    ADMIN_TOKEN === ""
+      ? ""
+      : `<label>Admin token <input type="password" name="token" autocomplete="off"></label>`;
+  const form = (scope: "all" | "test", label: string, count: number): string =>
+    `<form method="post" action="${pathname}">
+      <input type="hidden" name="confirm" value="RESET" />
+      <input type="hidden" name="scope" value="${scope}" />
+      ${tokenField}
+      <button type="submit">${label} (${count})</button>
+    </form>`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>poker — reset data</title>
+<style>
+  body { font-family: ui-monospace, monospace; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1 { font-size: 1.3rem; }
+  .warn { border: 2px solid #b00; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+  form { display: inline-block; margin: 0 0.5rem 0.5rem 0; }
+  button { padding: 0.5rem 0.9rem; cursor: pointer; }
+  label { display: block; margin: 0.4rem 0; }
+  code { background: #eee; color: #111; padding: 0 0.25rem; }
+</style>
+</head>
+<body>
+<h1>poker — reset data</h1>
+<p>Rooms on disk: <strong>${counts.all}</strong>. Test rooms: <strong>${counts.test}</strong>.</p>
+<div class="warn">
+  <p><strong>Destructive, no undo.</strong> A GET changes nothing; only these buttons do.</p>
+  ${form("test", "Delete TEST rooms only", counts.test)}
+  ${form("all", "Delete ALL rooms", counts.all)}
+</div>
+<p>A test room is one created with the <code>test</code> flag, or a legacy live-smoke room
+(<code>live-…</code> title). The gated live suite deletes its own rooms and never calls this page.</p>
+<p><a href="/">home</a></p>
+</body>
+</html>`;
 }
 
 /**
