@@ -19,8 +19,8 @@ type-stripping (`node server.ts`), exactly like offtube.
 
 ## Requirements / Acceptance criteria
 
-- [ ] **AC1** **BLOCKED until the user creates `311ecode/poker` on GitHub** (parent §5 item [B1]). Then:
-      repo exists, with `package.json`
+- [ ] **AC1** The repo is live (`311ecode/poker`, pushed 2026-09-13 — no longer blocked). Add
+      `package.json`
       (`type: module`, `engines.node >= 26.8.1`), `.gitignore` (`data/`, `.pm2/`, `.pw-browsers/`,
       `.cloudflared/`, `.env`), the **`SSPL-1.0`** license set — `LICENSE` (verbatim, **already
       landed** — do not edit), `COPYRIGHT`, `RESTRICTIONS.md` — and `"license": "SSPL-1.0"` in

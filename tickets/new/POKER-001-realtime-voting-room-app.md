@@ -269,20 +269,58 @@ LIVE=1 npm run test:e2e:live   # gated smoke against the deployed origin
 E2E must use **two independent browser contexts** in one room and assert the **WebSocket frames**
 for the anonymity rules, not only what is painted.
 
+### 4.1 The testing bar (applies to every sub-ticket)
+
+This app is small, but two of its properties are invisible to the eye and easy to break silently:
+**who knows what while a vote is open**, and **whether two writes landed cleanly**. Both are only
+ever proven by tests. So the bar is not "tests pass" — it is that the tests would *catch the bug*:
+
+1. **A test that cannot fail is not a test.** Before claiming any invariant is covered, **falsify
+   it**: introduce the defect deliberately, watch the test go red, then remove it. Required at
+   minimum for — the open-vote leak (make the server send `reveal` while open → `001c` must fail),
+   the one-file-write rule (write another room's file → `001b` must fail), atomicity (skip the
+   `rename` → `001b` must fail), and the ASCII cell width (shrink it by one → `001e` must fail).
+   Record the falsification in the ticket.
+2. **Assert the wire, not the pixels — for anything about secrecy.** The anonymity rules R1/R2 are
+   about what a client *receives*. A DOM-only test passes while the payload leaks the names. Record
+   the frames the second context receives and assert no frame carries `name`/`reveal`/`ballots`
+   while a vote is open.
+3. **Two real contexts for anything realtime.** Fan-out, the name-collision race and the
+   per-viewer ordering are properties *between* clients. Two `browser.newContext()` contexts in one
+   spec against one real server — no mocked socket, no single-page simulation.
+4. **Race the races.** `001b`'s per-room write lock and `001a`'s name claim must be exercised with
+   **genuine concurrency** (N simultaneous requests), not sequential calls that trivially pass.
+5. **Test the failure paths, not just the happy ones.** Malformed frame, oversize message, bad
+   passcode, cast on a closed vote, corrupt room file, unknown room. `001d` requires the public
+   origin to stay robust — that is only credible if something tried to break it.
+6. **Isolate by default.** Every spec gets a fresh temp `DATA_DIR` and a port it discovers itself
+   (`net.listen(0)`); suites run serialised. A test that depends on ordering or a shared port is a
+   future red, and this repo has no room for flaky.
+7. **The e2e suite is the gate for the feature, not a nicety.** `npm test` alone does not close a
+   sub-ticket: realtime, anonymity and reveal are proven end-to-end or they are not done. Do not
+   `test.skip` an inconvenient spec — file a ticket for the gap instead.
+8. **Hook semantics, not prose.** Expose `data-*` attributes (vote state, voter session, my-rooms)
+   and assert those; never scrape rendered sentences, and never assert the ASCII banner's pixels in
+   an e2e spec (`001e` unit-tests the font; e2e tests behaviour).
+
+Each sub-ticket lists its own concrete cases in its `## Tests` section. Those lists are the
+minimum, not the target.
+
 ## 5. Open items
 
-**Blocking — cannot start:**
-1. **[B1] The GitHub repo `311ecode/poker` does not exist.** `git push` fails with *"Repository not
-   found"* (verified 2026-09-13). Everything is committed locally and `origin` is already set, so
-   the moment the user creates the empty repo, `git push -u origin main` works. No sub-ticket can
-   land (and 001a AC1 cannot be ticked) until then.
+**Blocking:** none. (Was **[B1]** — the GitHub repo; resolved 2026-09-13, see below.)
 
 **Non-blocking:**
-2. **[N1] `instances: 1` is mandatory** (in-memory room state). Accept the single-process ceiling now.
+1. **[N1] `instances: 1` is mandatory** (in-memory room state). The single-process ceiling is
+   accepted, not a defect to fix later.
 
-**Resolved (2026-09-13):** the license question. **SSPL-1.0**, © Imre Toth — `LICENSE` (verbatim,
-fetched from the canonical text), `COPYRIGHT`, `RESTRICTIONS.md` and the SPDX field are landed in
-this repo. The earlier "LGPL" placeholder is dead; do not resurrect it.
+**Resolved (2026-09-13):**
+- **[B1] `311ecode/poker` exists and `main` is pushed.** Created via the API (private, no
+  auto-init), `origin` = `git@github.com:311ecode/poker.git`, `main` tracks `origin/main`, and the
+  verbatim `LICENSE` was verified byte-identical on the remote. `001a` AC1 is **no longer blocked**;
+  a fresh agent can clone or `git worktree` straight away.
+- **License:** **SSPL-1.0**, © Imre Toth — `LICENSE` (verbatim), `COPYRIGHT`, `RESTRICTIONS.md` and
+  the SPDX field are all landed. The earlier "LGPL" placeholder is dead; do not resurrect it.
 
 ## Done checklist
 
