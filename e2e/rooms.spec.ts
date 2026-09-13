@@ -34,6 +34,8 @@ test("AC4: create + find rooms; a protected room is discoverable but gated; wron
     // --- create a public room through the UI ---
     const publicCode = await createViaUi(page, uniqueTitle("findme"));
     await expectConnection(page, "open");
+    // POKER-007: no passcode → no passcode line.
+    await expect(page.locator("[data-room-passcode-line]")).toBeHidden();
 
     await goHome(page);
     await page.locator('[data-action="find-rooms"]').click();
@@ -96,6 +98,8 @@ test("AC4: create + find rooms; a protected room is discoverable but gated; wron
     await expectConnection(intruder, "open");
     await expect(intruder.locator("[data-error]")).toHaveAttribute("data-error", "");
     await expect(intruder.locator("[data-you-session]")).not.toHaveText("");
+    // POKER-007: an admitted member can read the passcode back and share it.
+    await expect(intruder.locator("[data-room-passcode]")).toHaveText("s3cret");
 
     // --- a truly unknown room is a clean error too ---
     await goHome(intruder);

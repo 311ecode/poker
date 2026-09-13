@@ -124,6 +124,12 @@
           <button type="submit" data-action="retry-join">Join room</button>
         </form>
 
+        <!-- POKER-007: shown to admitted members so they can share it. -->
+        <p class="room-passcode" data-room-passcode-line hidden>
+          Passcode: <code data-room-passcode></code>
+          <button type="button" data-action="copy-passcode">Copy</button>
+        </p>
+
         <!--
           POKER-005: the claim form exists ONLY while it is the path — in a room,
           unnamed. Once a name is claimed, app.js REMOVES it from the DOM, so

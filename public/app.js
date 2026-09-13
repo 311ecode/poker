@@ -22,11 +22,13 @@ import {
   memoryStorage,
   readMyRooms,
   readName,
+  readPasscode,
   readSelfChoices,
   readSession,
   rememberRoom,
   writeLastRoom,
   writeName,
+  writePasscode,
   writeSelfChoices,
 } from "./store.js";
 
@@ -116,6 +118,8 @@ const els = {
   youName: $("[data-you-name]"),
   youSession: $("[data-you-session]"),
   youLine: $("[data-you-line]"),
+  passcodeLine: $("[data-room-passcode-line]"),
+  passcodeValue: $("[data-room-passcode]"),
   claimSlot: $("[data-claim-slot]"),
   claimForm: $('[data-form="claim"]'),
   retryForm: $('[data-form="retry-join"]'),
@@ -367,6 +371,9 @@ function handleMessage(message) {
       state.myRooms = readMyRooms(storage);
       state.history = [];
       state.historyStatus = "idle";
+      // POKER-007: this browser was admitted with a passcode, so remember it for
+      // this room — an admitted member can read it back and share it.
+      if (state.roomCode && state.passcode) writePasscode(storage, state.roomCode, state.passcode);
       renderAll();
       // POKER-003: if the server does not know this session yet but a name is
       // burned into this browser, claim it silently — the form never appears.
@@ -612,6 +619,12 @@ function renderChrome() {
   if (els.retryForm) els.retryForm.hidden = !inRoom || state.error !== "bad_passcode";
   if (els.openVoteForm) els.openVoteForm.hidden = !inRoom || !named;
   if (els.needName) els.needName.hidden = !inRoom || named || !claimable;
+
+  // POKER-007: the room's passcode, for admitted members only (it is this
+  // browser's own copy — the server never sends a passcode).
+  const roomPasscode = inRoom && state.roomCode ? readPasscode(storage, state.roomCode) : "";
+  if (els.passcodeLine) els.passcodeLine.hidden = roomPasscode === "";
+  if (els.passcodeValue && roomPasscode !== "") els.passcodeValue.textContent = roomPasscode;
 }
 
 function renderMembers() {
@@ -1038,6 +1051,23 @@ $('[data-form="retry-join"]').addEventListener("submit", (event) => {
   event.preventDefault();
   state.passcode = els.roomPasscode.value;
   connect();
+});
+
+// POKER-007: copy this room's passcode so an admitted member can share it.
+$('[data-action="copy-passcode"]').addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const passcode = readPasscode(storage, state.roomCode);
+  if (!passcode) return;
+  try {
+    await navigator.clipboard.writeText(passcode);
+    button.textContent = "Copied";
+    setTimeout(() => {
+      button.textContent = "Copy";
+    }, 1500);
+  } catch {
+    // Clipboard can be unavailable (permissions/insecure context) — the code is
+    // on screen to read, so a failed copy is not worth an error banner.
+  }
 });
 
 $('[data-form="claim"]').addEventListener("submit", (event) => {

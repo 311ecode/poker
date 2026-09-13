@@ -380,6 +380,24 @@ li {
   font-size: 0.9rem;
 }
 
+/* POKER-007: an admitted member's own copy of the room passcode. */
+.room-passcode {
+  margin: 0.4rem 0;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.room-passcode code {
+  color: var(--text);
+  font-size: 1.05rem;
+}
+
+.room-passcode button {
+  margin-left: 0.4rem;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.85rem;
+}
+
 .tally {
   margin: 0.5rem 0;
 }

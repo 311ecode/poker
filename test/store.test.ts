@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   ensureSession,
+  forgetPasscode,
   forgetRoom,
   forgetSelfChoices,
   memoryStorage,
@@ -14,14 +15,17 @@ import {
   readLastRoom,
   readMyRooms,
   readName,
+  readPasscode,
   readSelfChoices,
   readSession,
   rememberRoom,
+  ROOM_PASSCODE_PREFIX,
   SELF_CHOICES_PREFIX,
   STORAGE_KEYS,
   writeLastRoom,
   writeMyRooms,
   writeName,
+  writePasscode,
   writeSelfChoices,
 } from "../public/store.js";
 
@@ -208,4 +212,30 @@ test("self choices drop corrupt entries, honour the cap, and clear when empty", 
 
   forgetSelfChoices(storage, "AAAAAA");
   assert.deepEqual(readSelfChoices(storage, "AAAAAA"), []);
+});
+
+// POKER-007: the room passcode this browser was admitted with, per room.
+
+test("room passcodes round-trip per room and are never shared across rooms", () => {
+  const storage = memoryStorage();
+  assert.equal(readPasscode(storage, "AAAAAA"), "");
+  writePasscode(storage, "AAAAAA", "s3cret");
+  writePasscode(storage, "BBBBBB", "other");
+
+  assert.equal(readPasscode(storage, "AAAAAA"), "s3cret");
+  assert.equal(readPasscode(storage, "bbbbbb"), "other");
+  assert.equal(readPasscode(storage, "CCCCCC"), "");
+  assert.equal(storage.getItem(`${ROOM_PASSCODE_PREFIX}AAAAAA`), "s3cret");
+
+  // An empty or over-long passcode clears rather than stores; forget removes.
+  assert.equal(writePasscode(storage, "AAAAAA", ""), "");
+  assert.equal(readPasscode(storage, "AAAAAA"), "");
+  assert.equal(writePasscode(storage, "AAAAAA", "x".repeat(129)), "");
+  assert.equal(readPasscode(storage, "AAAAAA"), "");
+  writePasscode(storage, "AAAAAA", "again");
+  forgetPasscode(storage, "AAAAAA");
+  assert.equal(readPasscode(storage, "AAAAAA"), "");
+  // An invalid room code is a no-op, never a throw.
+  assert.equal(writePasscode(storage, "nope", "x"), "");
+  assert.equal(readPasscode(storage, "nope"), "");
 });

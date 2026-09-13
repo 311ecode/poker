@@ -249,3 +249,50 @@ export function forgetSelfChoices(storage, code) {
   const key = selfChoicesKey(code);
   if (key) storage.removeItem(key);
 }
+
+// ---------------------------------------------------------------------------
+// Room passcode — POKER-007. Remembered per room in THIS browser so an admitted
+// member can read it back and share it. CLIENT-ONLY: the server keeps only a
+// salted hash and never returns the passcode (POKER-001 §1.1).
+// ---------------------------------------------------------------------------
+
+/** `poker.passcode.<CODE>` -> the passcode this browser was admitted with. */
+export const ROOM_PASSCODE_PREFIX = "poker.passcode.";
+
+/** Mirrors MAX_PASSCODE_LENGTH in lib/votes.ts. */
+const MAX_STORED_PASSCODE = 128;
+
+function roomPasscodeKey(code) {
+  const normalized = normalizeCode(code);
+  return normalized ? ROOM_PASSCODE_PREFIX + normalized : null;
+}
+
+/** The passcode this browser knows for a room, or "" when it has none. */
+export function readPasscode(storage, code) {
+  asStorage(storage);
+  const key = roomPasscodeKey(code);
+  if (!key) return "";
+  const raw = storage.getItem(key);
+  if (typeof raw !== "string" || raw === "") return "";
+  return raw.length <= MAX_STORED_PASSCODE ? raw : "";
+}
+
+/** Remember a room's passcode (empty or over-long clears it). Returns what is stored. */
+export function writePasscode(storage, code, passcode) {
+  asStorage(storage);
+  const key = roomPasscodeKey(code);
+  if (!key) return "";
+  const clean = typeof passcode === "string" ? passcode : "";
+  if (clean === "" || clean.length > MAX_STORED_PASSCODE) {
+    storage.removeItem(key);
+    return "";
+  }
+  storage.setItem(key, clean);
+  return clean;
+}
+
+export function forgetPasscode(storage, code) {
+  asStorage(storage);
+  const key = roomPasscodeKey(code);
+  if (key) storage.removeItem(key);
+}
