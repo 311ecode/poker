@@ -6,8 +6,9 @@ voted what — only how many have voted. Closing reveals; anyone can close **and
 
 Public: **https://poker.imre.dev** (via a Cloudflare tunnel on `hp-zbook-17-g2`).
 
-> **Status: PLANNED.** No code yet. The full design — frozen data schema, WebSocket protocol and
-> the anonymity rules — is in
+> **Status: LIVE** at **https://poker.imre.dev** — self-supervised on `hp-zbook-17-g2`
+> (user systemd → PM2 → Cloudflare tunnel). The full design — frozen data schema, WebSocket protocol
+> and the anonymity rules — is in
 > [`tickets/new/POKER-001-realtime-voting-room-app.md`](tickets/new/POKER-001-realtime-voting-room-app.md).
 
 ## What it is (and is not)

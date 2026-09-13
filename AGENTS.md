@@ -9,8 +9,8 @@ the dashboard shows it.
 It is a **sibling project**, not dashboard work: **no `DASH-…` tickets, no `menu-ctl.sh`, no
 reconcile, no per-env slice.** Work is tracked as **`POKER-…`** tickets in this repo.
 
-> **Status: PLANNED.** No code yet. The frozen contract (data schema, WebSocket protocol, anonymity
-> rules) is [`tickets/new/POKER-001-realtime-voting-room-app.md`](tickets/new/POKER-001-realtime-voting-room-app.md).
+> **Status: LIVE** at **https://poker.imre.dev**. The frozen contract (data schema, WebSocket
+> protocol, anonymity rules) is [`tickets/new/POKER-001-realtime-voting-room-app.md`](tickets/new/POKER-001-realtime-voting-room-app.md).
 
 ## Neighborhood
 
@@ -98,7 +98,10 @@ Same shape as `offtube`/`earthandfire`: **user systemd → PM2 → `node server.
   a proxied CNAME in the `imre.dev` zone. Scoped token in `.cloudflared/api-token` (0600,
   gitignored); the creator token at **`/tmp/env/CLOUDFLARE_TOKEN_CREATOR` on g2** is used only to
   mint it and is never stored.
-- **`cloudflared` is its own user unit** (`systemd/cloudflared.service`), **not** a PM2 app.
+- **`cloudflared` is its own user unit** — `systemd/poker-cloudflared.service` →
+  `~/.config/systemd/user/poker-cloudflared.service` — **not** a PM2 app, and deliberately **not**
+  named `cloudflared.service`: on g2 that name is offtube's tunnel for music.imre.dev, and
+  overwriting it takes that site down.
 - **No Cloudflare Access app** — this app is deliberately unauthenticated (POKER-001 decision 2).
   Make zone changes through the script, never by hand-editing `~/.cloudflared/`.
 
