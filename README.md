@@ -9,7 +9,7 @@ Public: **https://poker.imre.dev** (via a Cloudflare tunnel on `hp-zbook-17-g2`)
 > **Status: LIVE** at **https://poker.imre.dev** — self-supervised on `hp-zbook-17-g2`
 > (user systemd → PM2 → Cloudflare tunnel). The full design — frozen data schema, WebSocket protocol
 > and the anonymity rules — is in
-> [`tickets/new/POKER-001-realtime-voting-room-app.md`](tickets/new/POKER-001-realtime-voting-room-app.md).
+> [`tickets/done/POKER-001-realtime-voting-room-app.md`](tickets/done/POKER-001-realtime-voting-room-app.md).
 
 ## What it is (and is not)
 
@@ -69,10 +69,10 @@ disjoint by owned file:
 |---|---|
 | [POKER-001a](tickets/done/POKER-001a-server-protocol-core.md) | server + protocol spine |
 | [POKER-001b](tickets/done/POKER-001b-room-file-db.md) | one-JSON-per-room atomic, serialized db |
-| [POKER-001c](tickets/new/POKER-001c-browser-client-e2e.md) | browser client + Playwright e2e |
-| [POKER-001d](tickets/new/POKER-001d-deploy-g2-pm2-tunnel.md) | deploy on g2 (PM2 + tunnel) |
-| [POKER-001e](tickets/new/POKER-001e-ascii-ui.md) | Matrix ASCII UI |
-| [POKER-001f](tickets/new/POKER-001f-fleet-descriptor-catalog.md) | fleet descriptor/catalog (menu) |
+| [POKER-001c](tickets/done/POKER-001c-browser-client-e2e.md) | browser client + Playwright e2e |
+| [POKER-001d](tickets/done/POKER-001d-deploy-g2-pm2-tunnel.md) | deploy on g2 (PM2 + tunnel) |
+| [POKER-001e](tickets/done/POKER-001e-ascii-ui.md) | Matrix ASCII UI |
+| [POKER-001f](tickets/done/POKER-001f-fleet-descriptor-catalog.md) | fleet descriptor/catalog (menu) |
 
 ## Working on this repo
 

@@ -237,25 +237,25 @@ the moment `a` lands a protocol stub. `001f` is gated on `d` being live.
 
 ## 3. End-to-end acceptance (the parent is done when ALL of these hold)
 
-- [ ] `https://poker.imre.dev/api/health` → 200; PM2 `poker` online under `poker.service`,
+- [x] `https://poker.imre.dev/api/health` → 200; PM2 `poker` online under `poker.service`,
       recovered after `kill -9` (**001d**).
-- [ ] No authentication anywhere; no Access app; public origin robust to malformed input (**001d**).
-- [ ] Name claimed with no account; **duplicate rejected in realtime** (**001a/001c**).
-- [ ] Room create + find; a passcode-protected room rejects a wrong passcode and never leaks it
+- [x] No authentication anywhere; no Access app; public origin robust to malformed input (**001d**).
+- [x] Name claimed with no account; **duplicate rejected in realtime** (**001a/001c**).
+- [x] Room create + find; a passcode-protected room rejects a wrong passcode and never leaks it
       (**001a/001b**).
-- [ ] **My Rooms** = rooms this browser visited, **most-recent first**, survives reload (**001c**).
-- [ ] Any member can open a vote; it is **pushed** to every member without reload (**001a/001c**).
-- [ ] While open, **no client receives names/choices** (R1/R2), asserted on the wire (**001c**).
-- [ ] Voter order is per-viewer random, **stable**, **self last** (R3/R4) (**001e** + tests).
-- [ ] Close → reveal with the big-letter moment; reopen → names hidden, same vote (R5/R6); history
+- [x] **My Rooms** = rooms this browser visited, **most-recent first**, survives reload (**001c**).
+- [x] Any member can open a vote; it is **pushed** to every member without reload (**001a/001c**).
+- [x] While open, **no client receives names/choices** (R1/R2), asserted on the wire (**001c**).
+- [x] Voter order is per-viewer random, **stable**, **self last** (R3/R4) (**001e** + tests).
+- [x] Close → reveal with the big-letter moment; reopen → names hidden, same vote (R5/R6); history
       reachable (**001a/001c/001e**).
-- [ ] **One JSON file per room**: mutating a room writes exactly that room's file, atomically, and
+- [x] **One JSON file per room**: mutating a room writes exactly that room's file, atomically, and
       two rooms write concurrently without interference (**001b**).
-- [ ] ASCII banner renders equal-width for the enumerated strings; no clipped glyph; mobile
+- [x] ASCII banner renders equal-width for the enumerated strings; no clipped glyph; mobile
       fallback (**001e**).
-- [ ] `npm test` green; `npm run test:e2e` green with **two browser contexts** (**001c**).
-- [ ] Fleet dashboard shows the `poker` group; `menu` guard + dashboard unit suites green (**001f**).
-- [ ] LICENSE present and **verbatim** (**001a**); `COPYRIGHT` holds the © line; `RESTRICTIONS.md`
+- [x] `npm test` green; `npm run test:e2e` green with **two browser contexts** (**001c**).
+- [x] Fleet dashboard shows the `poker` group; `menu` guard + dashboard unit suites green (**001f**).
+- [x] LICENSE present and **verbatim** (**001a**); `COPYRIGHT` holds the © line; `RESTRICTIONS.md`
       is the plain-English summary; `package.json` declares `"license": "SSPL-1.0"`.
 
 ## 4. Tests
@@ -333,6 +333,38 @@ minimum, not the target.
 
 ## Done checklist
 
-- [ ] All six sub-tickets landed (AC in each), each pushed, each moved to `tickets/done/`
-- [ ] This parent's §3 verified **against the live origin**
-- [ ] Parent moved to `tickets/done/`
+- [x] All six sub-tickets landed (AC in each), each pushed, each moved to `tickets/done/`
+- [x] This parent's §3 verified **against the live origin**
+- [x] Parent moved to `tickets/done/`
+
+---
+
+## §3 verified against the LIVE origin (coordinator, 2026-09-13)
+
+All six sub-tickets are landed, pushed and in `tickets/done/`. Evidence below is the coordinator's
+own, measured against **https://poker.imre.dev** (not the authors' summaries).
+
+| §3 item | Evidence |
+|---|---|
+| health 200 under `poker.service`, recovers after `kill -9` | `/api/health` → 200; `kill -9` on the node PID → **HTTP 200 within 1 s**, PM2 `↺1`; `systemctl --user restart poker` also survives. |
+| no auth anywhere, no Access app, robust origin | `setup-cloudflare.mjs status` → *"no Access app fronts poker.imre.dev (verified live)"*, and the scoped token holds no Access permission. Hostile-input probe on the public socket: non-JSON, unknown type and a 70 KiB oversize frame each got a clean `bad_message`, the socket stayed alive (`ping` → `pong`) and health stayed 200. |
+| name claim, duplicate rejected in realtime | Live: first `claim` → `claim_ok`; second with the same name → `{"t":"error","code":"name_taken"}`; a third distinct name succeeds. Unit: 8 simultaneous claims → exactly one winner. |
+| room create + find; passcode rejects and never leaks | Live: protected room created, listed with `hasPasscode:true`, `/api/rooms` and `/api/rooms/:code` carry **no** passcode or hash; WS `hello` with a wrong **or missing** passcode → `bad_passcode`, correct → `hello_ok`. |
+| My Rooms = visited rooms, most-recent-first, survives reload | `e2e/my-rooms.spec.ts` (two contexts): order flips after a second visit, survives a reload, and `GET /api/myrooms` → **404** proves the server holds no per-browser history. |
+| vote pushed without reload | Live: A opens a vote, B receives `vote_new` and then `vote_update` (tally 2) on its own socket. |
+| while open, no client receives names/choices (R1/R2), asserted on the wire | `verify-live.mjs` scanned every open-vote frame B received with the product's own leakguard → **zero violations**; the raw frame is `counts`/`votedCount` only. `e2e/anonymity.spec.ts` asserts the same from `page.on("websocket")`. |
+| voter order per-viewer, stable, self last (R3/R4) | `ordering-live.mjs`, three live sockets: `A[B,C,A] B[C,A,B] C[B,A,C]` — same member set, different per viewer, self last exactly once, and **byte-identical after a disconnect + re-hello**. |
+| close → reveal; reopen → hidden; history | Live: `vote_closed` carries `reveal` for both members, `vote_reopened` hides names again on the same vote, and `GET /api/rooms/:code/history` reports events `["opened","closed","reopened"]`. |
+| one JSON file per room, atomic, rooms independent | Live: two rooms, a real mutation driven in room A over the public socket → **only A's file changed** (763 B, new mtime); B was byte- and mtime-identical. `001b` additionally proves atomicity (temp + `rename`) and a 50-way concurrent same-room write under lock. |
+| ASCII banner equal-width, no clipped glyph, mobile fallback | `e2e/presentation.spec.ts` AC9/AC11 + the coordinator's live Chromium check: the deployed page renders a `<pre>` with **5 rows of equal width (29 chars)**, real box-drawing glyphs, `data-banner-mode` mirroring the 480 px breakpoint, `scrollWidth === clientWidth`, and **zero console/page/request errors**. Equal-width is falsified by shrinking the cell (author) — red, then reverted. |
+| `npm test` green; `npm run test:e2e` green with two contexts | On `main`: **108 unit tests / 12 suites / 0 fail**; **16 e2e passed / 1 skipped (the gated live smoke) / 0 failed**, one worker. Every realtime/anonymity/ordering spec uses two `browser.newContext()` contexts against one real server. |
+| fleet dashboard shows poker; guard + dashboard unit green | `menu` `newMaster` `f6d1944b` pushed; menu guard suite **373/373** and dashboard unit **1523/1523**; the restarted dashboard renders a `poker` group with `env-status-green — "Serving — 1/1 services verified"` and both routes HTTP 200. |
+| LICENSE verbatim; COPYRIGHT; RESTRICTIONS; SPDX | `LICENSE` untouched since the commit that added it (557 lines, SSPL-1.0); `COPYRIGHT` holds the © line; `RESTRICTIONS.md` is the plain-English summary; `package.json` declares `"license": "SSPL-1.0"`. No secret is tracked (`git check-ignore` covers `.env`, `.cloudflared/`, `data/`, `bin/`, `.pw-browsers`, `.pm2/`). |
+
+**Two contract clarifications made during delivery**, both recorded in §5 above:
+**[N2]** §1.5's "never passcode-protected ones" is superseded — `public` governs discoverability and
+`hasPasscode` is advisory. **[N1]** `instances: 1` remains mandatory.
+
+**Delivery-decision note:** `public/asciiFont.js` is a relative symlink to the type-free
+`lib/asciiFont.ts`, keeping the font in one module with no build step while `server.ts` serves only
+`public/`; verified serving and rendering on the live origin.

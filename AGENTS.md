@@ -10,7 +10,7 @@ It is a **sibling project**, not dashboard work: **no `DASH-…` tickets, no `me
 reconcile, no per-env slice.** Work is tracked as **`POKER-…`** tickets in this repo.
 
 > **Status: LIVE** at **https://poker.imre.dev**. The frozen contract (data schema, WebSocket
-> protocol, anonymity rules) is [`tickets/new/POKER-001-realtime-voting-room-app.md`](tickets/new/POKER-001-realtime-voting-room-app.md).
+> protocol, anonymity rules) is [`tickets/done/POKER-001-realtime-voting-room-app.md`](tickets/done/POKER-001-realtime-voting-room-app.md).
 
 ## Neighborhood
 
