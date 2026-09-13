@@ -1,6 +1,8 @@
 # POKER-003 — the claimed name is burned into the browser and used automatically
 
 **Project:** poker (this repo, `main`) · **Created:** 2026-09-13
+**Status:** **DONE** (2026-09-13) — landed on `main` (`efa0708`), pushed, live on
+**https://poker.imre.dev** and verified there by the gated live smoke.
 **Reporter:** user — *"if name claimed you do not reclaim it, use it — it will be burned into your
 browser localStorage for life."*
 
@@ -24,16 +26,16 @@ untouched.
 
 ## 1. Acceptance criteria
 
-- [ ] AC1 — After a successful claim, `localStorage["poker.name"]` holds the name, and every later
+- [x] AC1 — After a successful claim, `localStorage["poker.name"]` holds the name, and every later
   room entry in that browser is named without any typing.
-- [ ] AC2 — In a room the server already knows this session in, the client sends **zero** `claim`
+- [x] AC2 — In a room the server already knows this session in, the client sends **zero** `claim`
   frames (asserted on the wire via Playwright `framesent`), including after a reload.
-- [ ] AC3 — In a room it does not know yet, the client sends **exactly one** silent `claim` with the
+- [x] AC3 — In a room it does not know yet, the client sends **exactly one** silent `claim` with the
   stored name, and the claim form is never shown.
-- [ ] AC4 — With no stored name, the claim form is shown (unchanged), and a rejected stored name
+- [x] AC4 — With no stored name, the claim form is shown (unchanged), and a rejected stored name
   (`name_taken`) reveals the form so a different name can be chosen.
-- [ ] AC5 — `npm test` and `npm run test:e2e` green (serialised); live smoke green on
-  `poker.imre.dev`; ticket moved to `tickets/done/`.
+- [x] AC5 — `npm test` green (112/112), `npm run test:e2e` green (19 passed, 2 live gated),
+  `LIVE=1 npm run test:e2e:live` green (3/3) on the origin; ticket moved to `tickets/done/`.
 
 ## 2. Files
 
