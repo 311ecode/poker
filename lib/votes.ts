@@ -250,13 +250,26 @@ export function applyOpenVote(
 ): MutationResult<{ vote: Vote }> {
   // POKER-002 AC2: no name, no vote operations.
   if (!isNamed(room, input.by)) return { ok: false, code: "name_required" };
-  if (typeof input.title !== "string") return { ok: false, code: "bad_title" };
-  const title = input.title.trim();
-  if (title === "" || title.length > MAX_TITLE_LENGTH) return { ok: false, code: "bad_title" };
   if (room.votes.length >= MAX_VOTES) return { ok: false, code: "too_many_votes" };
 
+  const id = nextVoteId(room);
+  // POKER-010: an empty question is not an error — the vote gets the next
+  // per-room number as its title ("Vote 1", "Vote 2", …), derived from the very
+  // counter that names the id, so it is unique and stable. A typed title wins.
+  const number = Number(/^v(\d+)$/.exec(id)?.[1] ?? room.votes.length + 1);
+  let title: string;
+  if (input.title === undefined || input.title === null) {
+    title = `Vote ${number}`;
+  } else {
+    if (typeof input.title !== "string") return { ok: false, code: "bad_title" };
+    const typed = input.title.trim();
+    if (typed === "") title = `Vote ${number}`;
+    else if (typed.length > MAX_TITLE_LENGTH) return { ok: false, code: "bad_title" };
+    else title = typed;
+  }
+
   const vote: Vote = {
-    id: nextVoteId(room),
+    id,
     title,
     // POKER-002 AC1: the deck is server-owned; `vote_open` cannot choose it.
     options: [...VOTE_DECK],

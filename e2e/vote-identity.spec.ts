@@ -97,3 +97,30 @@ test("POKER-002 AC4: my vote is obvious, changeable, and survives a reopen + rel
     await context.close();
   }
 });
+
+test("POKER-010: an empty question auto-numbers the vote", async ({ browser, request }) => {
+  const room = await createRoomViaApi(request, { title: uniqueTitle("autovote") });
+  const context = await browser.newContext();
+  try {
+    const { page } = await connectRoom(context, room.code, { name: "Alice" });
+
+    // Open with an empty question → the first vote is titled for us.
+    await page.locator('[data-action="open-vote"]').click();
+    const first = page.locator("[data-vote]").last();
+    await expect(first).toHaveAttribute("data-vote-state", "open");
+    await expect(first.locator("[data-vote-title]")).toHaveText("Vote 1");
+
+    // The next one counts on.
+    await page.locator('[data-action="open-vote"]').click();
+    await expect(page.locator("[data-vote]").last().locator("[data-vote-title]")).toHaveText("Vote 2");
+
+    // A typed question still wins.
+    await page.locator('[data-input="vote-title"]').fill("Custom question");
+    await page.locator('[data-action="open-vote"]').click();
+    await expect(page.locator("[data-vote]").last().locator("[data-vote-title]")).toHaveText(
+      "Custom question",
+    );
+  } finally {
+    await context.close();
+  }
+});

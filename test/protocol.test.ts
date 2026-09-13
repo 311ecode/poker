@@ -208,6 +208,43 @@ test("POKER-002: vote_open is server-owned — a supplied options list is ignore
   }
 });
 
+test("POKER-010: an empty vote question is auto-numbered per room", async () => {
+  const server = await startServer();
+  try {
+    const room = await createRoom(server, { title: "Auto" });
+    const alice = await joinAs(server, room.code, "s-a", "Alice");
+
+    // Whitespace-only → "Vote 1" with id v1.
+    alice.send({ t: "vote_open", title: "   " });
+    const first = await alice.ofType("vote_new");
+    assert.equal(first.json?.vote.id, "v1");
+    assert.equal(first.json?.vote.title, "Vote 1");
+
+    // No title field at all → "Vote 2".
+    alice.send({ t: "vote_open" });
+    const second = await alice.ofType("vote_new");
+    assert.equal(second.json?.vote.id, "v2");
+    assert.equal(second.json?.vote.title, "Vote 2");
+
+    // A typed title wins, and the numbering keeps counting behind it.
+    alice.send({ t: "vote_open", title: "  Named  " });
+    const third = await alice.ofType("vote_new");
+    assert.equal(third.json?.vote.title, "Named");
+    alice.send({ t: "vote_open", title: "" });
+    const fourth = await alice.ofType("vote_new");
+    assert.equal(fourth.json?.vote.id, "v4");
+    assert.equal(fourth.json?.vote.title, "Vote 4");
+
+    // Too long is still refused.
+    alice.send({ t: "vote_open", title: "x".repeat(81) });
+    await alice.errorCode("bad_title");
+
+    alice.destroy();
+  } finally {
+    await server.stop();
+  }
+});
+
 test("claim: N simultaneous claims for one name — exactly one winner (R7 race)", async () => {
   const server = await startServer();
   try {

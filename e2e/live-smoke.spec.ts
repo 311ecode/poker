@@ -91,6 +91,13 @@ test.describe("live smoke against the deployed origin", () => {
       await card.locator("[data-choice-select]").selectOption("3");
       await expect(card.locator("[data-your-choice]")).toHaveText("3");
       await expect(card.locator("[data-choice-select]")).toHaveValue("3");
+
+      // POKER-010: an empty question is auto-numbered (the titled vote was v1).
+      await voter.locator('[data-input="vote-title"]').fill("");
+      await voter.locator('[data-action="open-vote"]').click();
+      await expect(voter.locator("[data-vote]").last().locator("[data-vote-title]")).toHaveText(
+        "Vote 2",
+      );
     } finally {
       await named.close();
       await anon.close();
