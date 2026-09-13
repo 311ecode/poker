@@ -36,7 +36,8 @@ never remove the rewrite.
 
 **Vote rendering (POKER-011):** the Open-a-vote form lives **below** `[data-votes]`, and
 `renderVotes()` must preserve `scrollTop` and re-focus the vote `<select>` with `preventScroll` —
-casting a vote never moves the page or steals focus.
+casting a vote never moves the page or steals focus. Opening a vote clears the question box, and
+**only for the opener** (POKER-012) — never react to a `vote_new` broadcast by clearing input.
 
 It is a **sibling project**, not dashboard work: **no `DASH-…` tickets, no `menu-ctl.sh`, no
 reconcile, no per-env slice.** Work is tracked as **`POKER-…`** tickets in this repo.
