@@ -154,19 +154,6 @@
           <ul data-members data-members-state="empty"></ul>
         </section>
 
-        <form data-form="open-vote">
-          <h2>Open a vote</h2>
-          <label>
-            Question (optional)
-            <input data-input="vote-title" autocomplete="off" placeholder="Leave empty for “Vote 1”" />
-          </label>
-          <p class="hint">
-            Every vote uses the fixed deck 0, 0.5, 1, 2, 3, 5, 8, 13. An empty question is numbered
-            for you — “Vote 1”, “Vote 2”, …
-          </p>
-          <button type="submit" data-action="open-vote">Open vote</button>
-        </form>
-
         <section data-section="votes">
           <h2>Votes</h2>
           <p class="hint" data-need-name hidden>Claim a name above to open a vote or cast one.</p>
@@ -175,8 +162,22 @@
             While state="open" the card MUST NOT contain a member name or a
             per-person choice — counts + votedCount only (parent §1.2 R1/R2).
           -->
-          <p class="empty" data-empty="votes">No votes yet — open one above.</p>
+          <p class="empty" data-empty="votes">No votes yet — open one below.</p>
           <div data-votes data-votes-state="empty"></div>
+
+          <!-- POKER-011: the form sits BELOW the votes, not above them. -->
+          <form data-form="open-vote">
+            <h2>Open a vote</h2>
+            <label>
+              Question (optional)
+              <input data-input="vote-title" autocomplete="off" placeholder="Leave empty for “Vote 1”" />
+            </label>
+            <p class="hint">
+              Every vote uses the fixed deck 0, 0.5, 1, 2, 3, 5, 8, 13. An empty question is numbered
+              for you — “Vote 1”, “Vote 2”, …
+            </p>
+            <button type="submit" data-action="open-vote">Open vote</button>
+          </form>
         </section>
 
         <section data-section="history">

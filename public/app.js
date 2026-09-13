@@ -851,10 +851,32 @@ function voteCard(vote) {
 }
 
 function renderVotes() {
+  // POKER-011: rebuilding the cards destroys the focused control, which drops
+  // focus to <body> and can scroll the page to the top — exactly what must not
+  // happen while someone is voting. Capture the scroll offset and the focused
+  // vote select first, then restore both in this same task so nothing paints in
+  // between (the list is rebuilt twice per vote: optimistic + server echo).
+  const scroller = document.scrollingElement || document.documentElement;
+  const scrollTop = scroller ? scroller.scrollTop : 0;
+  const focused = document.activeElement;
+  const focusedVoteId =
+    focused && focused.matches?.("[data-choice-select]")
+      ? (focused.closest("[data-vote]")?.getAttribute("data-vote-id") ?? null)
+      : null;
+
   const cards = [...state.votes.values()].map((vote) => voteCard(vote));
   els.votes.replaceChildren(...cards);
   els.votes.setAttribute("data-votes-state", cards.length > 0 ? "ready" : "empty");
   els.emptyVotes.hidden = cards.length > 0;
+
+  if (scroller && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
+  if (focusedVoteId) {
+    const select = els.votes.querySelector(
+      `[data-vote-id="${focusedVoteId}"] [data-choice-select]`,
+    );
+    // preventScroll: re-focusing must not move the page either.
+    select?.focus?.({ preventScroll: true });
+  }
 }
 
 function renderMyRooms() {
