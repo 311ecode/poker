@@ -20,9 +20,15 @@ test("AC11: public/ is no-cache, plain ES modules, no build step", async ({ requ
   }
 
   // A real ES-module graph, not a bundle: app.js imports its siblings by URL.
+  // POKER-009: every specifier is build-stamped so a CDN cannot serve a stale
+  // module.
   const app = await (await request.get("/app.js")).text();
-  expect(app).toContain('from "./store.js"');
-  expect(app).toContain('from "./leakguard.js"');
+  expect(app).toMatch(/from "\.\/store\.js\?v=[^"]+"/);
+  expect(app).toMatch(/from "\.\/leakguard\.js\?v=[^"]+"/);
+
+  // The HTML entry points carry the same stamp.
+  expect(html).toMatch(/src="\.\/app\.js\?v=[^"]+"/);
+  expect(html).toMatch(/href="\.\/style\.css\?v=[^"]+"/);
 
   // The shell boots in a browser and exposes the data-* hooks the specs use.
   await page.goto("/");

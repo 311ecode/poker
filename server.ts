@@ -196,10 +196,21 @@ export function createPokerServer(options: PokerServerOptions = {}): PokerServer
         sendJson(res, 404, { error: "Not found" });
         return;
       }
-      const mime = STATIC_MIME[path.extname(abs).toLowerCase()] ?? "application/octet-stream";
+      const ext = path.extname(abs).toLowerCase();
+      const mime = STATIC_MIME[ext] ?? "application/octet-stream";
+      // POKER-009: HTML and JS are rewritten so every asset URL carries the
+      // build stamp. A CDN/edge that caches by extension (Cloudflare rewrites
+      // our `no-cache` to `max-age=14400` for .js) can then never serve a stale
+      // module: a new build is a new URL. This is a serving-time rewrite, not a
+      // bundle — the sources stay plain ES modules.
+      let body: Buffer | null = null;
+      if (ext === ".html" || ext === ".js" || ext === ".mjs") {
+        const raw = await fsp.readFile(abs, "utf8");
+        body = Buffer.from(versionAssetUrls(raw, ext, await assetBuild(publicDir)), "utf8");
+      }
       res.writeHead(200, {
         "Content-Type": mime,
-        "Content-Length": stat.size,
+        "Content-Length": body ? body.length : stat.size,
         // The client is plain ES modules served from here — a stale copy must
         // never be handed out (AC2).
         "Cache-Control": "no-cache",
@@ -208,7 +219,8 @@ export function createPokerServer(options: PokerServerOptions = {}): PokerServer
         res.end();
         return;
       }
-      createReadStream(abs).pipe(res);
+      if (body) res.end(body);
+      else createReadStream(abs).pipe(res);
     } catch {
       sendJson(res, 404, { error: "Not found" });
     }
@@ -441,9 +453,15 @@ function rejectUpgrade(socket: Socket, status: number, text: string): void {
  * POKER-008: a stamp for the served client assets — the newest mtime in
  * `public/`. It changes on a client deploy even when the server is not
  * restarted, so an open tab can detect that it is stale and reload. Never
- * throws: an unreadable directory is simply an empty stamp.
+ * throws: an unreadable directory is simply an empty stamp. Memoised briefly so
+ * a page load does not stat the whole directory once per asset.
  */
+let buildMemo: { at: number; value: string } = { at: 0, value: "" };
+
 async function assetBuild(dir: string): Promise<string> {
+  const now = Date.now();
+  if (buildMemo.value !== "" && now - buildMemo.at < 1000) return buildMemo.value;
+  let value = "";
   try {
     const entries = await fsp.readdir(dir, { withFileTypes: true });
     let newest = 0;
@@ -452,10 +470,30 @@ async function assetBuild(dir: string): Promise<string> {
       const stat = await fsp.stat(path.join(dir, entry.name));
       if (stat.mtimeMs > newest) newest = stat.mtimeMs;
     }
-    return newest > 0 ? String(Math.round(newest)) : "";
+    value = newest > 0 ? String(Math.round(newest)) : "";
   } catch {
-    return "";
+    value = "";
   }
+  buildMemo = { at: now, value };
+  return value;
+}
+
+/**
+ * POKER-009: stamp relative asset specifiers with the build, so a CDN that
+ * caches `.js`/`.css` by extension can never hand back a superseded module.
+ * In HTML this covers the `<script>`/`<link>` entry points; in JS it covers the
+ * relative ES-module imports (`from "./store.js"`, `import "./x.js"`).
+ */
+export function versionAssetUrls(text: string, ext: string, build: string): string {
+  if (!build) return text;
+  const pattern =
+    ext === ".html"
+      ? /(["'])(\.\/[A-Za-z0-9._-]+\.(?:js|mjs|css))\1/g
+      : /(["'])(\.\/[A-Za-z0-9._-]+\.m?js)\1/g;
+  return text.replace(
+    pattern,
+    (_match, quote: string, spec: string) => `${quote}${spec}?v=${build}${quote}`,
+  );
 }
 
 async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {  const chunks: Buffer[] = [];

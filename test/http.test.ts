@@ -7,6 +7,39 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { startServer, TestClient, createRoom, joinAs } from "./helpers.ts";
+import { versionAssetUrls } from "../server.ts";
+
+test("POKER-009: served assets are build-stamped so a CDN cannot serve a stale module", async () => {
+  const server = await startServer();
+  try {
+    const health = (await (await fetch(`${server.base}/api/health`)).json()) as any;
+    const build = health.build as string;
+    assert.ok(build.length > 0, "health carries a build stamp");
+
+    const html = await (await fetch(`${server.base}/`)).text();
+    assert.ok(html.includes(`./app.js?v=${build}`), "index.html stamps app.js");
+    assert.ok(html.includes(`./style.css?v=${build}`), "index.html stamps style.css");
+
+    const app = await (await fetch(`${server.base}/app.js`)).text();
+    assert.ok(app.includes(`./store.js?v=${build}`), "app.js stamps its imports");
+    assert.ok(app.includes(`./leakguard.js?v=${build}`), "app.js stamps every import");
+
+    // A stamped URL still serves the real module with the right type.
+    const stamped = await fetch(`${server.base}/store.js?v=${build}`);
+    assert.equal(stamped.status, 200);
+    assert.match(stamped.headers.get("content-type") ?? "", /javascript/);
+
+    // The pure rewriter: HTML entry points and JS specifiers, no-op without a build.
+    assert.equal(versionAssetUrls('href="./s.css"', ".html", "42"), 'href="./s.css?v=42"');
+    assert.equal(
+      versionAssetUrls('import x from "./a.js";', ".js", "42"),
+      'import x from "./a.js?v=42";',
+    );
+    assert.equal(versionAssetUrls('import x from "./a.js";', ".js", ""), 'import x from "./a.js";');
+  } finally {
+    await server.stop();
+  }
+});
 
 test("GET /api/health reports ok/version/rooms/connections/uptime", async () => {
   const server = await startServer({ version: "9.9.9-test" });
