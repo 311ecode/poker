@@ -45,6 +45,11 @@ casting a vote never moves the page or steals focus. Opening a vote clears the q
 `test: true` and swept by `scope=test` (plus legacy `live-…` titles); the live suite deletes its own
 rooms and must **never** call `/resetdata` on the deployed origin.
 
+**Attribution (POKER-014):** every screen carries `footer.site-footer` linking to `https://imre.dev`
+("brought to you by") and to the **public** source repo `https://github.com/311ecode/poker`
+("source"), both `target="_blank" rel="noopener noreferrer"`. The repo is public (SSPL-1.0 by
+design); keep both links.
+
 It is a **sibling project**, not dashboard work: **no `DASH-…` tickets, no `menu-ctl.sh`, no
 reconcile, no per-env slice.** Work is tracked as **`POKER-…`** tickets in this repo.
 
