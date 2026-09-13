@@ -26,7 +26,7 @@ Public: **https://poker.imre.dev** (via a Cloudflare tunnel on `hp-zbook-17-g2`)
 |---|---|
 | Runtime | **Node 26.8.1** (nvm), no bundler, no build step — `node server.ts` via Node type-stripping |
 | Realtime | **WebSocket** on the same port as HTTP; one PM2 process (`instances: 1`) |
-| Deck | **Fixed planning-poker scale** — `0, 0.5, 1, 2, 3, 5, 8, 13`, server-owned (POKER-002) |
+| Deck | **Fixed planning-poker scale** — `0, 0.5, 1, 2, 3, 5, 8, 13`, server-owned; chosen from one dropdown that casts the moment it changes (POKER-002/004) |
 | Identity | A **claimed name is mandatory** to vote and **permanent** per room; remembered in the browser and reused automatically (POKER-002/003) |
 | Database | **One JSON file per room** — `data/rooms/<CODE>.json`. No DB, no index, no event log |
 | Anonymity | While a vote is open: counts only, never names. Voter order is per-viewer, stable, **self last** |

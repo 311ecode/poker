@@ -6,8 +6,10 @@ runs self-supervised on `hp-zbook-17-g2` (like `offtube`/music.imre.dev), is pub
 own Cloudflare tunnel at **https://poker.imre.dev**, and is registered in the fleet inventory so
 the dashboard shows it.
 
-**Voting contract (POKER-002):** every vote uses the **one server-owned deck — `0, 0.5, 1, 2, 3, 5,
-8, 13`**; `vote_open` carries only a title and a client-supplied `options` list is ignored. A
+**Voting contract (POKER-002/004):** every vote uses the **one server-owned deck — `0, 0.5, 1, 2, 3,
+5, 8, 13`**; `vote_open` carries only a title and a client-supplied `options` list is ignored. The
+value is chosen from **one `<select>`** (`data-choice-select`) and **sent the moment it changes** —
+there is no cast button; first change is `vote_cast`, later ones `vote_change`. A
 **claimed name is mandatory** for `vote_open`/`vote_cast`/`vote_change`/`vote_close`/`vote_reopen`
 and is **permanent per room** (`name_required` / `name_locked`); re-claiming the same name is
 idempotent. The viewer's own ballot is remembered **client-side only** (localStorage per room) —

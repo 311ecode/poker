@@ -5,7 +5,8 @@
 and as I change it shall be sent immediately."* Clarified: **only the vote value** becomes a select;
 **names are not selected** — the name is written once on the page, then it is done, it cannot be
 changed, and it is bound to that browser.
-**Status:** IN PROGRESS
+**Status:** **DONE** (2026-09-13) — landed on `main` (`48ead3b`), pushed, live on
+**https://poker.imre.dev** and verified there by the gated live smoke.
 
 ## 0. Decision
 
@@ -21,16 +22,16 @@ changed, and it is bound to that browser.
 
 ## 1. Acceptance criteria
 
-- [ ] AC1 — Each vote card renders `select[data-choice-select]` with exactly the 8 deck options in
+- [x] AC1 — Each vote card renders `select[data-choice-select]` with exactly the 8 deck options in
   order, each option carrying `data-choice`, `data-count` and the label `"<value> (<count>)"`.
-- [ ] AC2 — Selecting a value on the real browser fires **no** extra click/submit: the `change`
+- [x] AC2 — Selecting a value on the real browser fires **no** extra click/submit: the `change`
   event alone sends `vote_cast` (first) / `vote_change` (later) and the count updates.
-- [ ] AC3 — The select is `disabled` while the viewer is unnamed or the vote is closed, and enabled
+- [x] AC3 — The select is `disabled` while the viewer is unnamed or the vote is closed, and enabled
   for a named viewer on an open vote.
-- [ ] AC4 — The select's value is my own ballot: it survives a close→reopen and a page reload, and
+- [x] AC4 — The select's value is my own ballot: it survives a close→reopen and a page reload, and
   the "Your vote: X" line still reads it (`data-your-choice`).
-- [ ] AC5 — `npm test` + `npm run test:e2e` green (serialised), live smoke green on
-  `poker.imre.dev`; ticket moved to `tickets/done/`.
+- [x] AC5 — `npm test` green (112/112), `npm run test:e2e` green (19 passed, 3 live gated),
+  `LIVE=1 npm run test:e2e:live` green (3/3) on the origin; ticket moved to `tickets/done/`.
 
 ## 2. Files
 
