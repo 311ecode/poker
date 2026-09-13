@@ -21,6 +21,11 @@ client sends **no `claim` frame at all**, and once a name exists the claim form 
 the DOM** (`public/app.js` `renderChrome` detaches it) — no claim, no rename. It is re-inserted only
 in a room, unnamed, with no stored name (or a stored name this room refused, e.g. `name_taken`).
 
+**Self-updating client (POKER-008):** `GET /api/health` carries a `build` stamp (the newest mtime in
+`public/`, so it changes on a client-only deploy without a PM2 restart). The client compares it and
+**reloads itself** when it changes, so a tab left open across a deploy cannot keep running a
+superseded client. Do not remove the stamp: stale tabs are otherwise invisible to the server.
+
 It is a **sibling project**, not dashboard work: **no `DASH-…` tickets, no `menu-ctl.sh`, no
 reconcile, no per-env slice.** Work is tracked as **`POKER-…`** tickets in this repo.
 

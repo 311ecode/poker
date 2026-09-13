@@ -4,7 +4,8 @@
 **Reporter:** user — repeatedly confused by a tab that had been open across deploys and kept running
 an old client (UUID member labels, hidden claim form, no vote dropdown), then asked *"am I using an
 old session?"*
-**Status:** IN PROGRESS
+**Status:** **DONE** (2026-09-13) — landed on `main` (`f05f8b6`), pushed, live on
+**https://poker.imre.dev** (`/api/health` carries the stamp).
 
 ## 0. Root cause
 
@@ -30,12 +31,13 @@ is not a fix.
 
 ## 2. Acceptance criteria
 
-- [ ] AC1 — `GET /api/health` carries a non-empty `build` string that changes when a `public/` file
-  changes (no PM2 restart needed).
-- [ ] AC2 — A booted client stores the build and does **not** reload while it is unchanged.
-- [ ] AC3 — When the server's build changes, the client reloads itself exactly once (proved with the
+- [x] AC1 — `GET /api/health` carries a non-empty `build` string that changes when a `public/` file
+  changes (no PM2 restart needed; verified live with a `touch`).
+- [x] AC2 — A booted client stores the build and does **not** reload while it is unchanged.
+- [x] AC3 — When the server's build changes, the client reloads itself exactly once (proved with the
   `__pokerTest.checkBuild()` hook and a mutated `/api/health`).
-- [ ] AC4 — `npm test` + `npm run test:e2e` green; live smoke green; ticket moved to `tickets/done/`.
+- [x] AC4 — `npm test` green (113/113), `npm run test:e2e` green (23 passed, 3 live gated),
+  `LIVE=1 npm run test:e2e:live` green (3/3) on the origin; ticket moved to `tickets/done/`.
 
 ## 3. Files
 
