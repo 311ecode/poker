@@ -47,15 +47,17 @@ test("AC3: claim a name; a duplicate held by context A is rejected in context B 
     await expect(b.page.locator("[data-you-name]")).toHaveText("Bob");
     await expect(a.page.locator('[data-member][data-member-name="Bob"]')).toHaveCount(1);
 
-    // POKER-002 AC3/AC5: the name is permanent — the claim form is gone, so the
-    // UI offers no way to change it (the server refuses too; see unit tests).
-    await expect(b.page.locator('[data-form="claim"]')).toBeHidden();
+    // POKER-005: the name is final — the claim form is REMOVED from the DOM, so
+    // there is no claim and no rename control in the room (the server refuses a
+    // rename too; see the protocol unit tests).
+    await expect(b.page.locator('[data-form="claim"]')).toHaveCount(0);
+    await expect(b.page.locator('[data-input="name"]')).toHaveCount(0);
 
     // The claimed name is server-authoritative: it survives a reload.
     await b.page.reload();
     await expectConnection(b.page, "open");
     await expect(b.page.locator("[data-you-name]")).toHaveText("Bob");
-    await expect(b.page.locator('[data-form="claim"]')).toBeHidden();
+    await expect(b.page.locator('[data-form="claim"]')).toHaveCount(0);
     await expect(b.page.locator("[data-error]")).toHaveAttribute("data-error", "");
   } finally {
     await contextA.close();
@@ -84,7 +86,7 @@ test("POKER-003: a claimed name is burned into the browser and used, never re-cl
     await page.reload();
     await expectConnection(page, "open");
     await expect(page.locator("[data-you-name]")).toHaveText("Lifetime");
-    await expect(page.locator('[data-form="claim"]')).toBeHidden();
+    await expect(page.locator('[data-form="claim"]')).toHaveCount(0);
     expect(sent.slice(beforeReloadA).filter((frame) => frame.json?.t === "claim")).toEqual([]);
 
     // A DIFFERENT room: the stored name is claimed silently — form never shown,
@@ -93,7 +95,7 @@ test("POKER-003: a claimed name is burned into the browser and used, never re-cl
     await enterRoom(page, roomB.code);
     await expectConnection(page, "open");
     await expect(page.locator("[data-you-name]")).toHaveText("Lifetime");
-    await expect(page.locator('[data-form="claim"]')).toBeHidden();
+    await expect(page.locator('[data-form="claim"]')).toHaveCount(0);
     const claimsInB = sent.slice(beforeB).filter((frame) => frame.json?.t === "claim");
     expect(claimsInB.map((frame) => frame.json?.name)).toEqual(["Lifetime"]);
 

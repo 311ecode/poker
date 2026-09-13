@@ -124,12 +124,18 @@
           <button type="submit" data-action="retry-join">Join room</button>
         </form>
 
-        <!-- POKER-002 AC5: the name is step one; once claimed this form is gone. -->
-        <form data-form="claim">
-          <h2>Claim a name</h2>
-          <label>Name <input data-input="name" autocomplete="off" maxlength="24" /></label>
-          <button type="submit" data-action="claim-name">Claim name</button>
-        </form>
+        <!--
+          POKER-005: the claim form exists ONLY while it is the path — in a room,
+          unnamed. Once a name is claimed, app.js REMOVES it from the DOM, so
+          there is no claim and no rename control in a room.
+        -->
+        <div data-claim-slot>
+          <form data-form="claim" hidden>
+            <h2>Claim a name</h2>
+            <label>Name <input data-input="name" autocomplete="off" maxlength="24" /></label>
+            <button type="submit" data-action="claim-name">Claim name</button>
+          </form>
+        </div>
         <p data-you-line>
           You are <strong data-you-name></strong>
           (<code data-you-session></code>)

@@ -42,9 +42,9 @@ test("POKER-002 AC1/AC5: the fixed deck is rendered and the name is the gate", a
     // No name, no ballot: the select is disabled for the unnamed viewer.
     await expect(card.locator("[data-choice-select]")).toBeDisabled();
 
-    // Claiming flips the gate: the deck becomes usable, the form disappears.
+    // Claiming flips the gate: the deck becomes usable, the form is gone.
     await claimName(b.page, "Bob");
-    await expect(b.page.locator('[data-form="claim"]')).toBeHidden();
+    await expect(b.page.locator('[data-form="claim"]')).toHaveCount(0);
     await expect(b.page.locator('[data-form="open-vote"]')).toBeVisible();
     await expect(b.page.locator("[data-need-name]")).toBeHidden();
     await expect(card.locator("[data-choice-select]")).toBeEnabled();

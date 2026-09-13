@@ -60,6 +60,8 @@ test.describe("live smoke against the deployed origin", () => {
       await voter.locator('[data-input="name"]').fill("LiveVoter");
       await voter.locator('[data-action="claim-name"]').click();
       await expect(voter.locator("[data-you-name]")).toHaveText("LiveVoter");
+      // POKER-005: claimed → the claim form is gone from the DOM.
+      await expect(voter.locator('[data-form="claim"]')).toHaveCount(0);
 
       // An unnamed visitor is gated: claim form only, no vote form.
       const guest = await anon.newPage();
@@ -117,11 +119,12 @@ test.describe("live smoke against the deployed origin", () => {
       await page.locator('[data-action="claim-name"]').click();
       await expect(page.locator("[data-you-name]")).toHaveText("LiveLife");
 
-      // Room B: named automatically, the form is never the path.
+      // Room B: named automatically, the form is never the path — and by
+      // POKER-005 it does not even exist in the DOM.
       await page.goto(`${ORIGIN}/#/room/${roomB}`);
       await expect(page.locator("[data-connection]")).toHaveAttribute("data-connection", "open");
       await expect(page.locator("[data-you-name]")).toHaveText("LiveLife");
-      await expect(page.locator('[data-form="claim"]')).toBeHidden();
+      await expect(page.locator('[data-form="claim"]')).toHaveCount(0);
     } finally {
       await context.close();
     }

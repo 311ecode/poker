@@ -113,6 +113,7 @@ const els = {
   youName: $("[data-you-name]"),
   youSession: $("[data-you-session]"),
   youLine: $("[data-you-line]"),
+  claimSlot: $("[data-claim-slot]"),
   claimForm: $('[data-form="claim"]'),
   retryForm: $('[data-form="retry-join"]'),
   openVoteForm: $('[data-form="open-vote"]'),
@@ -541,19 +542,26 @@ function renderYou() {
 }
 
 /**
- * POKER-002 AC5/AC6: the room stays lean. Claiming a name is step one, so the
- * claim form disappears once a name exists and the name becomes read-only; the
- * passcode retry form appears only when a protected room refused admission.
+ * POKER-002/003/005: the room stays lean and a claimed name is final. The claim
+ * form is physically REMOVED from the DOM once a name exists — no claim, no
+ * rename — and inserted only when it is genuinely the path (in a room, unnamed,
+ * no stored name, or a stored name this room refused). The passcode retry form
+ * appears only when a protected room refused admission.
  */
 function renderChrome() {
   const inRoom = state.route.name === "room";
   const named = (state.you.name ?? "") !== "";
   const storedName = readName(storage).trim();
-  // POKER-003: a name burned into localStorage is used automatically on entry,
-  // so the form is never the path — unless that stored name was rejected in
-  // this room (taken), when the visitor must pick another.
-  const claimable = !named && (storedName === "" || state.claimRejected);
-  if (els.claimForm) els.claimForm.hidden = !inRoom || !claimable;
+  const claimable = inRoom && !named && (storedName === "" || state.claimRejected);
+
+  if (els.claimForm && els.claimSlot) {
+    if (claimable) {
+      if (!els.claimForm.isConnected) els.claimSlot.append(els.claimForm);
+      els.claimForm.hidden = false;
+    } else if (els.claimForm.isConnected) {
+      els.claimForm.remove();
+    }
+  }
   if (els.youLine) els.youLine.hidden = !inRoom || !named;
   if (els.retryForm) els.retryForm.hidden = !inRoom || state.error !== "bad_passcode";
   if (els.openVoteForm) els.openVoteForm.hidden = !inRoom || !named;
