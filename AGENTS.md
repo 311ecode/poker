@@ -26,6 +26,12 @@ in a room, unnamed, with no stored name (or a stored name this room refused, e.g
 **reloads itself** when it changes, so a tab left open across a deploy cannot keep running a
 superseded client. Do not remove the stamp: stale tabs are otherwise invisible to the server.
 
+**Asset versioning (POKER-009):** the origin rewrites HTML/JS asset URLs with `?v=<build>`
+(`versionAssetUrls` in `server.ts`). Cloudflare rewrites our `Cache-Control: no-cache` to
+`max-age=14400` for `.js`/`.css`, so without the stamp a reload serves fresh `index.html` with stale
+modules — the "mixed client" bug. Keep `public/` modules versioned; never serve them unversioned and
+never remove the rewrite.
+
 It is a **sibling project**, not dashboard work: **no `DASH-…` tickets, no `menu-ctl.sh`, no
 reconcile, no per-env slice.** Work is tracked as **`POKER-…`** tickets in this repo.
 
