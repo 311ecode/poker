@@ -655,28 +655,31 @@ function voteCard(vote) {
   }
   card.append(yourVote);
 
-  const options = el("ul", { "data-options": "" });
+  // POKER-004: one select, sent the moment it changes — no button, no submit.
+  const picker = el("p", { class: "choice-picker" });
+  const select = el("select", {
+    "data-choice-select": "",
+    "aria-label": "Your vote",
+    // POKER-002/004: no name or a closed vote → not votable.
+    disabled: open && named ? undefined : "disabled",
+  });
+  select.append(
+    el("option", { value: "", "data-choice-placeholder": "", disabled: "disabled" }, "— choose a value —"),
+  );
   for (const option of vote.options ?? []) {
     const count = vote.counts?.[option] ?? 0;
-    const isMine = mine === option;
-    const attrs = {
-      type: "button",
-      "data-choice": option,
-      "data-count": String(count),
-      "aria-pressed": isMine ? "true" : "false",
-      // POKER-002 AC2/AC5: no name, no ballot — the server refuses it anyway.
-      disabled: open && named ? undefined : "disabled",
-    };
-    if (isMine) attrs["data-self-choice"] = "true";
-    const button = el("button", attrs);
-    button.append(document.createTextNode(`${option} (`));
-    button.append(el("span", { "data-count-value": "" }, String(count)));
-    button.append(document.createTextNode(")"));
-    const item = el("li");
-    item.append(button);
-    options.append(item);
+    select.append(
+      el(
+        "option",
+        { value: option, "data-choice": option, "data-count": String(count) },
+        `${option} (${count})`,
+      ),
+    );
   }
-  card.append(options);
+  // The current value IS my own ballot (POKER-002 mirror): visible, changeable.
+  select.value = mine ?? "";
+  picker.append(select);
+  card.append(picker);
 
   // While OPEN: a name-free voter order, per-viewer, self last (R2/R3/R4, AC5).
   if (vote.state === "open") {
@@ -1013,14 +1016,10 @@ $('[data-action="load-history"]').addEventListener("click", () => {
 });
 
 els.votes.addEventListener("click", (event) => {
-  const target = event.target.closest("[data-action], [data-choice]");
+  const target = event.target.closest("[data-action]");
   if (!target) return;
   const voteId = target.closest("[data-vote]")?.getAttribute("data-vote-id");
   if (!voteId) return;
-  if (target.hasAttribute("data-choice")) {
-    castVote(voteId, target.getAttribute("data-choice"));
-    return;
-  }
   const action = target.getAttribute("data-action");
   if (action === "close-vote") send({ t: "vote_close", voteId });
   else if (action === "reopen-vote") send({ t: "vote_reopen", voteId });
@@ -1030,6 +1029,17 @@ els.votes.addEventListener("click", (event) => {
     skippedReveals.add(voteId);
     renderVotes();
   }
+});
+
+// POKER-004: the vote value is chosen from a select and sent the moment it
+// changes — there is no cast button and nothing else to click.
+els.votes.addEventListener("change", (event) => {
+  const select = event.target.closest("[data-choice-select]");
+  if (!select) return;
+  const voteId = select.closest("[data-vote]")?.getAttribute("data-vote-id");
+  const choice = select.value;
+  if (!voteId || typeof choice !== "string" || choice === "") return;
+  castVote(voteId, choice);
 });
 
 for (const container of [els.myRooms, els.rooms]) {

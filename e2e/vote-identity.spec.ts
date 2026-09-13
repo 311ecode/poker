@@ -35,17 +35,19 @@ test("POKER-002 AC1/AC5: the fixed deck is rendered and the name is the gate", a
 
     const voteId = await openVote(a.page, "How many points?");
     const card = voteCard(b.page, voteId);
-    // Exactly the fixed deck, in order, each card starting at 0.
-    await expect(card.locator("[data-choice]")).toHaveText(DECK.map((option) => `${option} (0)`));
-    // No name, no ballot: every card is disabled for the unnamed viewer.
-    await expect(card.locator('[data-choice="3"]')).toBeDisabled();
+    // POKER-004: exactly the fixed deck, in order, as select options at 0.
+    await expect(card.locator("[data-choice-select] option[data-choice]")).toHaveText(
+      DECK.map((option) => `${option} (0)`),
+    );
+    // No name, no ballot: the select is disabled for the unnamed viewer.
+    await expect(card.locator("[data-choice-select]")).toBeDisabled();
 
     // Claiming flips the gate: the deck becomes usable, the form disappears.
     await claimName(b.page, "Bob");
     await expect(b.page.locator('[data-form="claim"]')).toBeHidden();
     await expect(b.page.locator('[data-form="open-vote"]')).toBeVisible();
     await expect(b.page.locator("[data-need-name]")).toBeHidden();
-    await expect(card.locator('[data-choice="3"]')).toBeEnabled();
+    await expect(card.locator("[data-choice-select]")).toBeEnabled();
 
     await castVote(b.page, voteId, "3");
     await expect(yourVote(b.page, voteId)).toHaveText("3");
@@ -63,15 +65,14 @@ test("POKER-002 AC4: my vote is obvious, changeable, and survives a reopen + rel
     const voteId = await openVote(page, "Estimate it");
     const card = voteCard(page, voteId);
 
-    // Before casting, the card says so and nothing is marked.
+    // Before casting, the card says so and the select holds no value.
     await expect(card.locator("[data-your-vote]")).toContainText("not cast yet");
-    await expect(card.locator('[data-self-choice="true"]')).toHaveCount(0);
+    await expect(card.locator("[data-choice-select]")).toHaveValue("");
 
-    // Cast → the choice is stated in words AND the card is marked.
+    // Cast → the choice is stated in words AND shown by the select.
     await castVote(page, voteId, "3");
     await expect(yourVote(page, voteId)).toHaveText("3");
-    await expect(card.locator('[data-choice="3"]')).toHaveAttribute("data-self-choice", "true");
-    await expect(card.locator('[data-choice="3"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(card.locator("[data-choice-select]")).toHaveValue("3");
 
     // Round 2 is the SAME world: close → reopen keeps my ballot …
     await card.locator('[data-action="close-vote"]').click();
@@ -83,10 +84,10 @@ test("POKER-002 AC4: my vote is obvious, changeable, and survives a reopen + rel
     // … and I can simply change my own choice.
     await castVote(page, voteId, "8");
     await expect(yourVote(page, voteId)).toHaveText("8");
-    await expect(card.locator('[data-choice="8"]')).toHaveAttribute("data-self-choice", "true");
-    await expect(card.locator('[data-choice="3"]')).not.toHaveAttribute("data-self-choice", "true");
-    await expect(card.locator('[data-choice="3"]')).toHaveAttribute("data-count", "0");
-    await expect(card.locator('[data-choice="8"]')).toHaveAttribute("data-count", "1");
+    await expect(card.locator("[data-choice-select]")).toHaveValue("8");
+    // The live counts follow the change.
+    await expect(card.locator('option[data-choice="3"]')).toHaveAttribute("data-count", "0");
+    await expect(card.locator('option[data-choice="8"]')).toHaveAttribute("data-count", "1");
 
     // The client-side mirror survives a full reload.
     await page.reload();

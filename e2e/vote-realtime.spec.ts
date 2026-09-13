@@ -133,7 +133,7 @@ test("AC9: close reveals names+choices, reopen re-hides and resumes, history kee
     await expect(voteCard(a.page, voteId)).toHaveAttribute("data-vote-state", "open");
     await expect(voteCard(a.page, voteId).locator("[data-reveal]")).toHaveCount(0);
     await castVote(a.page, voteId, "5");
-    await expect(voteCard(b.page, voteId).locator('[data-choice="5"]')).toHaveAttribute("data-count", "2");
+    await expect(voteCard(b.page, voteId).locator('option[data-choice="5"]')).toHaveAttribute("data-count", "2");
     await expect(voteCard(b.page, voteId).locator("[data-voted-count]")).toHaveText("2");
 
     // History: one vote, all three transitions, in order.

@@ -68,12 +68,12 @@ test.describe("live smoke against the deployed origin", () => {
       await expect(guest.locator('[data-form="claim"]')).toBeVisible();
       await expect(guest.locator('[data-form="open-vote"]')).toBeHidden();
 
-      // The fixed, server-owned deck.
+      // The fixed, server-owned deck, chosen from a select (POKER-004).
       await voter.locator('[data-input="vote-title"]').fill("Live estimate");
       await voter.locator('[data-action="open-vote"]').click();
       const card = voter.locator("[data-vote]").last();
       await expect(card).toHaveAttribute("data-vote-state", "open");
-      await expect(card.locator("[data-choice]")).toHaveText([
+      await expect(card.locator("[data-choice-select] option[data-choice]")).toHaveText([
         "0 (0)",
         "0.5 (0)",
         "1 (0)",
@@ -83,12 +83,12 @@ test.describe("live smoke against the deployed origin", () => {
         "8 (0)",
         "13 (0)",
       ]);
-      await expect(guest.locator("[data-vote]").last().locator('[data-choice="3"]')).toBeDisabled();
+      await expect(guest.locator("[data-vote]").last().locator("[data-choice-select]")).toBeDisabled();
 
-      // Cast 3 → my own vote is stated and marked.
-      await card.locator('[data-choice="3"]').click();
+      // Choosing 3 sends it immediately → my own vote is stated and shown.
+      await card.locator("[data-choice-select]").selectOption("3");
       await expect(card.locator("[data-your-choice]")).toHaveText("3");
-      await expect(card.locator('[data-choice="3"]')).toHaveAttribute("data-self-choice", "true");
+      await expect(card.locator("[data-choice-select]")).toHaveValue("3");
     } finally {
       await named.close();
       await anon.close();

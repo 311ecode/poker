@@ -335,28 +335,29 @@ li {
   border-left-color: var(--muted);
 }
 
-/* POKER-002: the fixed deck reads as one row of cards. */
-[data-options] {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  list-style: none;
-  padding-left: 0;
+/* POKER-004: the vote value is one select; changing it casts immediately. */
+.choice-picker {
+  margin: 0.4rem 0;
 }
 
-[data-options] button {
-  min-width: 4.5rem;
-  text-align: center;
+[data-choice-select] {
+  display: block;
+  min-width: 13rem;
+  max-width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
   font-family: var(--mono);
   font-size: 1.05rem;
 }
 
-/* POKER-002 AC4: my own vote must be unmistakable. */
-[data-options] button[aria-pressed="true"],
-[data-self-choice="true"] {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
-  filter: brightness(1.18);
+[data-choice-select]:disabled {
+  opacity: 0.55;
+  border-color: var(--border);
+  cursor: not-allowed;
 }
 
 .your-vote {

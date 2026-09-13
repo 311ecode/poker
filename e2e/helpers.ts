@@ -193,8 +193,12 @@ export function voteCard(page: Page, voteId: string) {
   return page.locator(`[data-vote][data-vote-id="${voteId}"]`);
 }
 
+/**
+ * POKER-004: cast by choosing the value in the vote card's select. This is the
+ * ONLY way to vote — there is no button; `selectOption` fires `change`.
+ */
 export async function castVote(page: Page, voteId: string, choice: string): Promise<void> {
-  await page.locator(`[data-vote-id="${voteId}"] [data-choice="${choice}"]`).click();
+  await page.locator(`[data-vote-id="${voteId}"] [data-choice-select]`).selectOption(choice);
 }
 
 /** POKER-002 AC4: the visible "Your vote" choice on a card. */
