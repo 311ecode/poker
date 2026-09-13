@@ -4,7 +4,8 @@
 **Reporter:** user — after a reload during a deploy window the room showed *"You are (…)"* empty, the
 member row showed `s-b0d5b3ee-… (online)` instead of a name, and the claim form was present but
 hidden, so there was no way to claim. *"it's not my name… I've created it."*
-**Status:** IN PROGRESS
+**Status:** **DONE** (2026-09-13) — landed on `main` (`10e3b92`), pushed, live on
+**https://poker.imre.dev**.
 
 ## 0. Root cause
 
@@ -30,12 +31,13 @@ this ticket closes.
 
 ## 2. Acceptance criteria
 
-- [ ] AC1 — An unnamed member row reads "not named yet (online)" and never contains `s-…`.
-- [ ] AC2 — A stored name that this room refuses (taken) shows the error **and** the claim form,
+- [x] AC1 — An unnamed member row reads "not named yet (online)" and never contains `s-…`.
+- [x] AC2 — A stored name that this room refuses (taken) shows the error **and** the claim form,
   prefilled with the stored name.
-- [ ] AC3 — If the silent claim frame is swallowed (never reaches the server), the claim form still
+- [x] AC3 — If the silent claim frame is swallowed (never reaches the server), the claim form still
   appears within the stall window, so the visitor can claim manually.
-- [ ] AC4 — `npm test` + `npm run test:e2e` green; live smoke green; ticket moved to `tickets/done/`.
+- [x] AC4 — `npm test` green (112/112), `npm run test:e2e` green (22 passed, 3 live gated),
+  `LIVE=1 npm run test:e2e:live` green (3/3) on the origin; ticket moved to `tickets/done/`.
 
 ## 3. Files
 
