@@ -21,3 +21,6 @@ playwright-report/
 .DS_Store
 *.log
 node_modules/
+
+# Vendored cloudflared binary (39 MB, per-machine) — never committed
+bin/
