@@ -1,0 +1,714 @@
+// public/app.js — the poker browser client (POKER-001c).
+//
+// Plain ES module, no bundler, no build step (AC11). It owns the WebSocket
+// (`/ws`), hash routing, the local My-Rooms store and every user flow: join,
+// create, find, claim a name, open/cast/close/reopen, reveal and history.
+//
+// Anonymity (the one rule): while a vote is OPEN the vote card renders counts,
+// `votedCount` and a NAME-FREE voter order. The server never sends names while
+// open (parent §1.2 R1/R2) and neither does this client — do not add a name to
+// the open vote card.
+
+import { messageFor } from "./messages.js";
+import { openVoteViolations } from "./leakguard.js";
+import {
+  ensureSession,
+  memoryStorage,
+  readMyRooms,
+  readName,
+  readSession,
+  rememberRoom,
+  writeLastRoom,
+  writeName,
+} from "./store.js";
+
+// ---------------------------------------------------------------------------
+// storage + session (browser globals are injectable: see test/store.test.ts)
+// ---------------------------------------------------------------------------
+
+function pickStorage() {
+  try {
+    const probe = "__poker_probe__";
+    window.localStorage.setItem(probe, "1");
+    window.localStorage.removeItem(probe);
+    return window.localStorage;
+  } catch {
+    return memoryStorage();
+  }
+}
+
+const storage = pickStorage();
+const session = ensureSession(storage, window.crypto);
+
+// ---------------------------------------------------------------------------
+// state
+// ---------------------------------------------------------------------------
+
+const state = {
+  route: { name: "home" },
+  connection: "closed",
+  error: null,
+  room: null,
+  roomCode: null,
+  passcode: "",
+  you: { session, name: "" },
+  members: [],
+  votes: new Map(), // id -> vote view (counts only while open)
+  orders: new Map(), // id -> { order: [session], self }
+  selfChoices: new Map(), // id -> choice this browser cast (local only)
+  rooms: [],
+  myRooms: readMyRooms(storage),
+  history: [],
+};
+
+// A debug buffer of every frame RECEIVED by this page. It supplements the e2e
+// specs' native `page.on("websocket")` capture, never replaces it (AC7).
+const receivedFrames = [];
+window.__pokerFrames = receivedFrames;
+
+// Client-side supplement: any open-vote frame that looks like a leak is logged
+// here (public/leakguard.js). The e2e assertion is on the raw wire; this is a
+// cheap second pair of eyes and keeps the scanner on the real client path.
+const leakLog = [];
+window.__pokerLeaks = leakLog;
+
+// ---------------------------------------------------------------------------
+// dom
+// ---------------------------------------------------------------------------
+
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
+
+const els = {
+  body: document.body,
+  homePanel: $('[data-panel="home"]'),
+  roomPanel: $('[data-panel="room"]'),
+  connection: $("[data-connection]"),
+  error: $("[data-error]"),
+  roomCode: $("[data-room-code]"),
+  roomTitle: $("[data-room-title]"),
+  youName: $("[data-you-name]"),
+  youSession: $("[data-you-session]"),
+  members: $("[data-members]"),
+  votes: $("[data-votes]"),
+  myRooms: $("[data-my-rooms]"),
+  rooms: $("[data-rooms]"),
+  history: $("[data-history]"),
+  joinCode: $('[data-input="join-code"]'),
+  joinPasscode: $('[data-input="join-passcode"]'),
+  createTitle: $('[data-input="create-title"]'),
+  createPasscode: $('[data-input="create-passcode"]'),
+  createPublic: $('[data-input="create-public"]'),
+  nameInput: $('[data-input="name"]'),
+  voteTitle: $('[data-input="vote-title"]'),
+  voteOptions: $('[data-input="vote-options"]'),
+  roomPasscode: $('[data-input="room-passcode"]'),
+};
+
+function el(tag, attrs = {}, text) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === undefined || value === null) continue;
+    node.setAttribute(key, String(value));
+  }
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+// ---------------------------------------------------------------------------
+// websocket
+// ---------------------------------------------------------------------------
+
+let socket = null;
+let reconnectTimer = null;
+let reconnectDelay = 250;
+
+function wsUrl() {
+  const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${scheme}//${window.location.host}/ws`;
+}
+
+function send(message) {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(message));
+    return true;
+  }
+  return false;
+}
+
+function setConnection(value) {
+  state.connection = value;
+  els.connection.setAttribute("data-connection", value);
+  els.connection.textContent = value;
+}
+
+function closeSocket() {
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  const current = socket;
+  socket = null;
+  if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) {
+    current.close();
+  }
+}
+
+/** Connect (or reconnect) the single socket to `state.roomCode`. */
+function connect() {
+  if (!state.roomCode) return;
+  closeSocket();
+  setConnection("connecting");
+  const ws = new WebSocket(wsUrl());
+  socket = ws;
+
+  ws.addEventListener("open", () => {
+    if (socket !== ws) return;
+    reconnectDelay = 250;
+    setConnection("open");
+    const hello = { t: "hello", room: state.roomCode, session: state.you.session };
+    if (state.passcode) hello.passcode = state.passcode;
+    send(hello);
+  });
+
+  ws.addEventListener("message", (event) => {
+    if (socket !== ws) return;
+    const payload = typeof event.data === "string" ? event.data : String(event.data);
+    receivedFrames.push(payload);
+    const leaks = openVoteViolations(payload);
+    if (leaks.length > 0) leakLog.push({ payload, leaks });
+    let message = null;
+    try {
+      message = JSON.parse(payload);
+    } catch {
+      showError("bad_message");
+      return;
+    }
+    handleMessage(message);
+  });
+
+  ws.addEventListener("close", () => {
+    if (socket !== ws) return;
+    setConnection("closed");
+    if (state.roomCode) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (state.roomCode) connect();
+      }, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 4000);
+    }
+  });
+
+  ws.addEventListener("error", () => {
+    /* the close handler owns recovery */
+  });
+}
+
+// ---------------------------------------------------------------------------
+// protocol
+// ---------------------------------------------------------------------------
+
+function handleMessage(message) {
+  if (!message || typeof message.t !== "string") return;
+  switch (message.t) {
+    case "hello_ok": {
+      state.room = message.room ?? null;
+      state.roomCode = message.room?.code ?? state.roomCode;
+      state.you = { session: message.you?.session ?? state.you.session, name: message.you?.name ?? "" };
+      state.votes = new Map();
+      state.orders = new Map();
+      for (const vote of message.state?.votes ?? []) state.votes.set(vote.id, vote);
+      clearError();
+      rememberRoom(storage, state.roomCode);
+      writeLastRoom(storage, state.roomCode);
+      state.myRooms = readMyRooms(storage);
+      state.history = [];
+      renderAll();
+      return;
+    }
+    case "presence": {
+      state.members = Array.isArray(message.members) ? message.members : [];
+      renderMembers();
+      return;
+    }
+    case "claim_ok": {
+      state.you = { session: message.you?.session ?? state.you.session, name: message.you?.name ?? "" };
+      writeName(storage, state.you.name);
+      clearError();
+      renderYou();
+      return;
+    }
+    case "vote_new":
+    case "vote_update":
+    case "vote_closed":
+    case "vote_reopened": {
+      const vote = message.vote;
+      if (vote && typeof vote.id === "string") state.votes.set(vote.id, vote);
+      renderVotes();
+      return;
+    }
+    case "vote_you": {
+      if (typeof message.voteId === "string") {
+        state.orders.set(message.voteId, {
+          order: Array.isArray(message.order) ? message.order : [],
+          self: message.self ?? state.you.session,
+        });
+      }
+      renderVotes();
+      return;
+    }
+    case "rooms": {
+      state.rooms = Array.isArray(message.rooms) ? message.rooms : [];
+      renderRooms();
+      return;
+    }
+    case "room_created": {
+      const code = message.room?.code;
+      if (code) goToRoom(code, state.passcode);
+      return;
+    }
+    case "history": {
+      state.history = Array.isArray(message.votes) ? message.votes : [];
+      renderHistory();
+      return;
+    }
+    case "pong":
+      return;
+    case "error": {
+      showError(typeof message.code === "string" ? message.code : "server_error");
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+function showError(code) {
+  state.error = code;
+  els.error.setAttribute("data-error", code);
+  els.error.textContent = messageFor(code);
+  els.error.hidden = false;
+}
+
+function clearError() {
+  state.error = null;
+  els.error.setAttribute("data-error", "");
+  els.error.textContent = "";
+  els.error.hidden = true;
+}
+
+// ---------------------------------------------------------------------------
+// routing
+// ---------------------------------------------------------------------------
+
+function parseHash(hash = window.location.hash) {
+  const raw = (hash || "").replace(/^#/, "");
+  const [pathPart, queryPart] = raw.split("?");
+  const segments = pathPart.split("/").filter(Boolean);
+  if (segments[0] === "room" && segments[1]) {
+    const params = new URLSearchParams(queryPart ?? "");
+    return { name: "room", code: segments[1].toUpperCase(), passcode: params.get("passcode") ?? "" };
+  }
+  return { name: "home" };
+}
+
+function applyRoute() {
+  const route = parseHash();
+  state.route = route;
+  // A stale error from a previous route must not follow the user around; each
+  // hello/claim refreshes it.
+  clearError();
+  if (route.name === "room") {
+    const changed = state.roomCode !== route.code;
+    state.roomCode = route.code;
+    state.passcode = route.passcode ?? "";
+    state.room = changed ? null : state.room;
+    if (changed) {
+      state.votes = new Map();
+      state.orders = new Map();
+      state.selfChoices = new Map();
+      state.members = [];
+      connect();
+    }
+  } else {
+    state.roomCode = null;
+    state.room = null;
+    state.passcode = "";
+    closeSocket();
+  }
+  renderAll();
+}
+
+function goToRoom(code, passcode) {
+  const query = passcode ? `?passcode=${encodeURIComponent(passcode)}` : "";
+  window.location.hash = `#/room/${code}${query}`;
+}
+
+// ---------------------------------------------------------------------------
+// rendering — every hook the e2e specs assert on
+// ---------------------------------------------------------------------------
+
+function renderAll() {
+  renderRoute();
+  renderYou();
+  renderMembers();
+  renderVotes();
+  renderMyRooms();
+  renderRooms();
+  renderHistory();
+}
+
+function renderRoute() {
+  const inRoom = state.route.name === "room";
+  els.body.setAttribute("data-view", inRoom ? "room" : "home");
+  els.homePanel.hidden = inRoom;
+  els.roomPanel.hidden = !inRoom;
+  els.roomCode.textContent = state.roomCode ?? "";
+  els.roomTitle.textContent = state.room?.title ?? "";
+  if (inRoom) els.roomPasscode.value = state.passcode ?? "";
+}
+
+function renderYou() {
+  els.youName.textContent = state.you.name ?? "";
+  els.youSession.textContent = state.you.session ?? "";
+}
+
+function renderMembers() {
+  const items = state.members.map((member) => {
+    const li = el("li", {
+      "data-member": "",
+      "data-member-session": member.session,
+      "data-member-name": member.name,
+      "data-member-online": member.online ? "true" : "false",
+    });
+    li.textContent = `${member.name || member.session}${member.online ? " (online)" : ""}`;
+    return li;
+  });
+  els.members.replaceChildren(...items);
+}
+
+/**
+ * The label for one voter slot. While a vote is OPEN the vote card must carry
+ * no member name (parent §1.2 R1/R2), so the label is positional — a name
+ * belongs in the reveal only. `presence` deliberately is NOT consulted here.
+ */
+function voterLabel(index, isSelf) {
+  return isSelf ? `Voter ${index + 1} (you)` : `Voter ${index + 1}`;
+}
+
+function voteCard(vote) {
+  const card = el("article", { "data-vote": "", "data-vote-id": vote.id, "data-vote-state": vote.state });
+  card.append(el("h3", { "data-vote-title": "" }, vote.title ?? ""));
+
+  const meta = el("p");
+  meta.append(el("span", { "data-voted-count": "" }, String(vote.votedCount ?? 0)));
+  meta.append(document.createTextNode(" / "));
+  meta.append(el("span", { "data-total-members": "" }, String(vote.totalMembers ?? 0)));
+  meta.append(document.createTextNode(" voted"));
+  card.append(meta);
+
+  const options = el("ul", { "data-options": "" });
+  for (const option of vote.options ?? []) {
+    const count = vote.counts?.[option] ?? 0;
+    const attrs = {
+      type: "button",
+      "data-choice": option,
+      "data-count": String(count),
+      disabled: vote.state === "open" ? undefined : "disabled",
+    };
+    if (state.selfChoices.get(vote.id) === option) attrs["data-self-choice"] = "true";
+    const button = el("button", attrs);
+    button.append(document.createTextNode(`${option} (`));
+    button.append(el("span", { "data-count-value": "" }, String(count)));
+    button.append(document.createTextNode(")"));
+    const item = el("li");
+    item.append(button);
+    options.append(item);
+  }
+  card.append(options);
+
+  // While OPEN: a name-free voter order, per-viewer, self last.
+  if (vote.state === "open") {
+    const order = state.orders.get(vote.id)?.order ?? [];
+    const list = el("ol", { "data-voters": "" });
+    order.forEach((voterSession, index) => {
+      const isSelf = voterSession === state.you.session;
+      list.append(
+        el(
+          "li",
+          {
+            "data-voter": "",
+            "data-voter-session": voterSession,
+            "data-voter-position": String(index + 1),
+            "data-voter-self": isSelf ? "true" : "false",
+          },
+          voterLabel(index, isSelf),
+        ),
+      );
+    });
+    card.append(list);
+  }
+
+  // Closed: names + choices are revealed to everyone (R5).
+  if (vote.state === "closed") {
+    const reveal = el("div", { "data-reveal": "" });
+    const list = el("ul", { "data-reveal-list": "" });
+    for (const entry of vote.reveal ?? []) {
+      list.append(
+        el(
+          "li",
+          {
+            "data-reveal-entry": "",
+            "data-reveal-name": entry.name,
+            "data-reveal-choice": entry.choice,
+          },
+          `${entry.name} → ${entry.choice}`,
+        ),
+      );
+    }
+    reveal.append(list);
+    card.append(reveal);
+  }
+
+  const close = el("button", { type: "button", "data-action": "close-vote" }, "Close vote");
+  close.hidden = vote.state !== "open";
+  const reopen = el("button", { type: "button", "data-action": "reopen-vote" }, "Reopen vote");
+  reopen.hidden = vote.state !== "closed";
+  card.append(close, reopen);
+  return card;
+}
+
+function renderVotes() {
+  const cards = [...state.votes.values()].map((vote) => voteCard(vote));
+  els.votes.replaceChildren(...cards);
+}
+
+function renderMyRooms() {
+  const items = state.myRooms.map((entry) => {
+    const li = el("li", {
+      "data-my-room": "",
+      "data-my-room-code": entry.code,
+      "data-last-visit": String(entry.lastVisitAt),
+    });
+    const open = el("button", { type: "button", "data-action": "open-room", "data-open-room": entry.code }, entry.code);
+    li.append(open, document.createTextNode(` — ${new Date(entry.lastVisitAt).toISOString()}`));
+    return li;
+  });
+  els.myRooms.replaceChildren(...items);
+}
+
+function renderRooms() {
+  const items = state.rooms.map((room) => {
+    const li = el("li", {
+      "data-room-summary": "",
+      "data-room-summary-code": room.code,
+      "data-has-passcode": room.hasPasscode ? "true" : "false",
+      "data-members": String(room.members ?? 0),
+    });
+    li.append(document.createTextNode(`${room.code} — ${room.title} `));
+    const join = el("button", { type: "button", "data-action": "open-room", "data-open-room": room.code }, "open");
+    if (room.hasPasscode) join.setAttribute("data-needs-passcode", "true");
+    li.append(join);
+    return li;
+  });
+  els.rooms.replaceChildren(...items);
+}
+
+function renderHistory() {
+  const items = state.history.map((vote) => {
+    const li = el("li", {
+      "data-history-vote": "",
+      "data-history-vote-id": vote.id,
+      "data-history-state": vote.state,
+    });
+    li.append(el("h4", {}, vote.title ?? ""));
+    const counts = el("p", { "data-history-counts": "" },
+      Object.entries(vote.counts ?? {}).map(([choice, count]) => `${choice}: ${count}`).join(", "));
+    li.append(counts);
+    const events = el("ul", { "data-history-events": "" });
+    for (const event of vote.events ?? []) {
+      events.append(
+        el(
+          "li",
+          { "data-history-event": "", "data-event-kind": event.kind, "data-event-at": String(event.at) },
+          `${event.kind} @ ${new Date(event.at).toISOString()}`,
+        ),
+      );
+    }
+    li.append(events);
+    if (vote.reveal) {
+      const reveal = el("ul", { "data-history-reveal": "" });
+      for (const entry of vote.reveal) {
+        reveal.append(
+          el(
+            "li",
+            { "data-history-reveal-entry": "", "data-reveal-name": entry.name, "data-reveal-choice": entry.choice },
+            `${entry.name} → ${entry.choice}`,
+          ),
+        );
+      }
+      li.append(reveal);
+    }
+    return li;
+  });
+  els.history.replaceChildren(...items);
+}
+
+// ---------------------------------------------------------------------------
+// user actions
+// ---------------------------------------------------------------------------
+
+async function createRoom() {
+  const title = els.createTitle.value.trim();
+  const passcode = els.createPasscode.value;
+  const isPublic = els.createPublic.checked;
+  let response;
+  try {
+    response = await fetch("/api/rooms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, public: isPublic, passcode: passcode || undefined }),
+    });
+  } catch {
+    showError("server_error");
+    return;
+  }
+  let body = {};
+  try {
+    body = await response.json();
+  } catch {
+    body = {};
+  }
+  if (!response.ok) {
+    showError(typeof body.error === "string" ? body.error : "server_error");
+    return;
+  }
+  clearError();
+  const code = body.room?.code;
+  if (code) {
+    state.passcode = passcode;
+    goToRoom(code, passcode);
+  }
+}
+
+async function findRooms() {
+  try {
+    const response = await fetch("/api/rooms");
+    const body = await response.json();
+    state.rooms = Array.isArray(body.rooms) ? body.rooms : [];
+    renderRooms();
+  } catch {
+    showError("server_error");
+  }
+}
+
+function castVote(voteId, choice) {
+  if (send({ t: "vote_cast", voteId, choice })) {
+    state.selfChoices.set(voteId, choice);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// wiring
+// ---------------------------------------------------------------------------
+
+$('[data-form="join"]').addEventListener("submit", (event) => {
+  event.preventDefault();
+  const code = els.joinCode.value.trim().toUpperCase();
+  goToRoom(code, els.joinPasscode.value);
+});
+
+$('[data-form="create"]').addEventListener("submit", (event) => {
+  event.preventDefault();
+  void createRoom();
+});
+
+$('[data-action="find-rooms"]').addEventListener("click", () => void findRooms());
+
+$('[data-form="retry-join"]').addEventListener("submit", (event) => {
+  event.preventDefault();
+  state.passcode = els.roomPasscode.value;
+  connect();
+});
+
+$('[data-form="claim"]').addEventListener("submit", (event) => {
+  event.preventDefault();
+  const name = els.nameInput.value.trim();
+  if (name === "") {
+    showError("bad_name");
+    return;
+  }
+  send({ t: "claim", name });
+});
+
+$('[data-form="open-vote"]').addEventListener("submit", (event) => {
+  event.preventDefault();
+  const options = els.voteOptions.value
+    .split("\n")
+    .map((option) => option.trim())
+    .filter((option) => option !== "");
+  send({ t: "vote_open", title: els.voteTitle.value.trim(), options });
+});
+
+$('[data-action="load-history"]').addEventListener("click", () => {
+  send({ t: "history", room: state.roomCode });
+});
+
+els.votes.addEventListener("click", (event) => {
+  const target = event.target.closest("[data-action], [data-choice]");
+  if (!target) return;
+  const voteId = target.closest("[data-vote]")?.getAttribute("data-vote-id");
+  if (!voteId) return;
+  if (target.hasAttribute("data-choice")) {
+    castVote(voteId, target.getAttribute("data-choice"));
+    return;
+  }
+  const action = target.getAttribute("data-action");
+  if (action === "close-vote") send({ t: "vote_close", voteId });
+  else if (action === "reopen-vote") send({ t: "vote_reopen", voteId });
+});
+
+for (const container of [els.myRooms, els.rooms]) {
+  container.addEventListener("click", (event) => {
+    const target = event.target.closest('[data-action="open-room"]');
+    if (!target) return;
+    goToRoom(target.getAttribute("data-open-room"), "");
+  });
+}
+
+document.querySelector('[data-action="home"]').addEventListener("click", () => {
+  window.location.hash = "#/";
+});
+
+window.addEventListener("hashchange", () => applyRoute());
+
+// debug/test hook: the e2e robustness spec needs to put a hostile payload on
+// the real socket. This is the ONLY test-only surface (AC10).
+window.__pokerTest = {
+  sendRaw(text) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(String(text));
+      return true;
+    }
+    return false;
+  },
+  closeSocket() {
+    if (socket) socket.close();
+  },
+  socketState() {
+    return socket ? socket.readyState : -1;
+  },
+  session: () => state.you.session,
+  room: () => state.roomCode,
+  myRooms: () => readMyRooms(storage),
+};
+
+// ---------------------------------------------------------------------------
+// boot
+// ---------------------------------------------------------------------------
+
+els.nameInput.value = readName(storage);
+if (!readSession(storage)) {
+  // ensureSession above already persisted it; this is a defensive re-check.
+  ensureSession(storage, window.crypto);
+}
+setConnection("closed");
+applyRoute();
