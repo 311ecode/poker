@@ -3,7 +3,8 @@
 **Project:** poker (this repo, `main`) · **Created:** 2026-09-13
 **Reporter:** user — *"I still can claim my name within a room… also if a name is claimed, no more
 claims or renames."*
-**Status:** IN PROGRESS
+**Status:** **DONE** (2026-09-13) — landed on `main` (`e0d49dc`), pushed, live on
+**https://poker.imre.dev** and verified there by the gated live smoke.
 
 ## 0. Root cause first
 
@@ -27,14 +28,14 @@ attribute. This ticket makes it structural.
 
 ## 2. Acceptance criteria
 
-- [ ] AC1 — In a room with a claimed name, `[data-form="claim"]` has **count 0** (detached), both
+- [x] AC1 — In a room with a claimed name, `[data-form="claim"]` has **count 0** (detached), both
   after the claim and after a reload; the e2e asserts the absence, not just non-visibility.
-- [ ] AC2 — The form is present and visible only in a room, unnamed, with no stored name (or after a
+- [x] AC2 — The form is present and visible only in a room, unnamed, with no stored name (or after a
   stored name was refused here) — the POKER-002/003 paths keep working.
-- [ ] AC3 — The server still refuses a rename with `name_locked` (unit test), and never changes a
+- [x] AC3 — The server still refuses a rename with `name_locked` (unit test), and never changes a
   name on a repeat claim.
-- [ ] AC4 — `npm test` + `npm run test:e2e` green; live smoke green on `poker.imre.dev`; ticket
-  moved to `tickets/done/`.
+- [x] AC4 — `npm test` green (112/112), `npm run test:e2e` green (19 passed, 3 live gated),
+  `LIVE=1 npm run test:e2e:live` green (3/3) on the origin; ticket moved to `tickets/done/`.
 
 ## 3. Files
 

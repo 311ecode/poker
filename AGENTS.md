@@ -15,10 +15,11 @@ and is **permanent per room** (`name_required` / `name_locked`); re-claiming the
 idempotent. The viewer's own ballot is remembered **client-side only** (localStorage per room) —
 never echo a per-person choice on the wire.
 
-**Name lifetime (POKER-003):** the claimed name is **burned into the browser** (`localStorage
+**Name lifetime (POKER-003/005):** the claimed name is **burned into the browser** (`localStorage
 poker.name`) and reused automatically; in a room the server already knows this session in, the
-client sends **no `claim` frame at all**, and the claim form never appears while a stored name
-exists (only a stored name this room refused, e.g. `name_taken`, re-opens it).
+client sends **no `claim` frame at all**, and once a name exists the claim form is **removed from
+the DOM** (`public/app.js` `renderChrome` detaches it) — no claim, no rename. It is re-inserted only
+in a room, unnamed, with no stored name (or a stored name this room refused, e.g. `name_taken`).
 
 It is a **sibling project**, not dashboard work: **no `DASH-…` tickets, no `menu-ctl.sh`, no
 reconcile, no per-env slice.** Work is tracked as **`POKER-…`** tickets in this repo.
