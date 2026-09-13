@@ -2,6 +2,7 @@
 // `Cache-Control: no-cache`, as plain ES modules, with no build step.
 
 import { expect, test } from "@playwright/test";
+import { createRoomViaApi, uniqueTitle } from "./helpers.js";
 
 test("AC11: public/ is no-cache, plain ES modules, no build step", async ({ request, page }) => {
   const index = await request.get("/");
@@ -38,4 +39,26 @@ test("AC11: public/ is no-cache, plain ES modules, no build step", async ({ requ
   await expect(page.locator("[data-rooms]")).toBeAttached();
   expect(await page.evaluate(() => typeof (globalThis as any).__pokerTest)).toBe("object");
   expect(await page.evaluate(() => Array.isArray((globalThis as any).__pokerFrames))).toBe(true);
+});
+
+test("POKER-014: every screen carries the attribution footer", async ({ page, request }) => {
+  await page.goto("/");
+  const footer = page.locator("footer.site-footer");
+  await expect(footer).toBeVisible();
+
+  const home = footer.locator('a[href="https://imre.dev"]');
+  const source = footer.locator('a[href="https://github.com/311ecode/poker"]');
+  await expect(home).toHaveText("imre.dev");
+  await expect(source).toHaveText("source");
+  for (const link of [home, source]) {
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", /noopener/);
+  }
+
+  // The footer lives outside the panels, so the Room screen has it too.
+  const room = await createRoomViaApi(request, { title: uniqueTitle("footer") });
+  await page.goto(`/#/room/${room.code}`);
+  await expect(page.locator('[data-panel="room"]')).toBeVisible();
+  await expect(page.locator("footer.site-footer")).toBeVisible();
+  await expect(page.locator('footer.site-footer a[href="https://imre.dev"]')).toBeVisible();
 });

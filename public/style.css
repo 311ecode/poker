@@ -380,6 +380,25 @@ li {
   font-size: 0.9rem;
 }
 
+/* POKER-014: attribution footer on every screen. */
+.site-footer {
+  margin: 2.5rem 0 1.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.site-footer a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 /* POKER-007: an admitted member's own copy of the room passcode. */
 .room-passcode {
   margin: 0.4rem 0;
