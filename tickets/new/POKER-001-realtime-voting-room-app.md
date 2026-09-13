@@ -36,7 +36,12 @@ Cloudflare Access. The `poker` name is the *theme*; the feature is the voting ro
 
 ---
 
-## 1. The frozen contract (all sub-tickets build against this — 001a owns it)
+## 1. The frozen contract
+
+**Frozen. Owned by 001a. Do not edit §1 from a sub-ticket.** The message shapes, the room-file
+schema, the anonymity rules R1–R7 and the client keys in §1.7 are the interface every slice codes
+against; a change is a `001a` amendment **plus a message to every consumer**, never a silent edit.
+All sub-tickets build against this section.
 
 ### 1.1 Database: one JSON file per room
 
@@ -143,10 +148,63 @@ promise lock serializes same-room writes while different rooms stay parallel; co
 | `lib/asciiFont.ts` | **001e** |
 | `lib/db.ts` | **001b** |
 | `lib/rooms.ts`, `lib/votes.ts`, `server.ts` | **001a** |
-| `public/**` | **001c** (shell/JS) + **001e** (ASCII + theme CSS) |
+| `public/**` | **001c** (shell + client JS) — 001e adds **only** the banner/markup call sites |
+| `public/style.css` | **001e alone** |
 | `e2e/**`, `playwright.config.ts` | **001c** |
 | `ecosystem.config.cjs`, `scripts/**`, `systemd/**`, `.cloudflared/**` | **001d** |
 | `tickets/**` in `menu` | **001f** |
+
+**CSS rule (resolves the only overlap):** `001c` may use inline styles and `data-*` hooks but
+**must not create or edit `public/style.css`** — put the unstyled markup plus a
+`/* POKER-001e: style this */` marker in place. `001e` owns that file end to end, so the two
+slices never conflict.
+
+### 1.7 Client session + client-side state (contract — 001c implements, 001a accepts)
+
+- **Session id:** generated **once per browser** as `"s-" + crypto.randomUUID()`, stored in
+  `localStorage["poker.session"]`. Sent in every `hello`. It is the *only* identity; no auth.
+- **Name:** kept in `localStorage["poker.name"]` (a convenience prefill only — authority is the
+  server's `members[].name` for the room).
+- **My Rooms:** `localStorage["poker.myrooms"]` = `[{ code, lastVisitAt }, …]`, updated on every
+  room visit and rendered **most-recent-first**. Never sent to the server; the server must not grow
+  a "recent rooms" endpoint.
+- **Last room:** `localStorage["poker.lastRoom"]` (optional convenience deep-link).
+
+### 1.8 Transport decision (settled — 001a implements)
+
+**Hand-rolled WebSocket over `node:http`'s `upgrade` event — zero runtime dependencies**, matching
+offtube (its `package.json` has **no** `dependencies`; only `@playwright/test` and `pm2` as dev
+deps). Implement RFC 6455 framing for the subset used here: text frames, ping/pong, close,
+payload lengths 7-bit/16-bit/64-bit, and **masked client→server frames** (unmasking is required).
+Do **not** add `ws` — if framing turns out to be a real time sink, that is a 001a decision to
+escalate, not a silent dependency add.
+
+### 1.9 Reference assets to copy and adapt (read these before writing anything)
+
+All paths are in **`~/dev/offtube`** (this machine) — the proven self-supervised deploy.
+
+| Asset | Path | ~size | Use for |
+|---|---|---|---|
+| PM2 definition | `ecosystem.config.cjs` | 49 L | 001d `ecosystem.config.cjs` |
+| PM2 boot script | `scripts/pm2-start.sh` | 22 L | 001d (nvm PATH pin — **change `v24.15.0` → `v26.8.1`**) |
+| Keeper unit | `systemd/offtube.service` | 37 L | 001d `systemd/poker.service` |
+| Tunnel unit | `systemd/cloudflared.service` | 20 L | 001d (not a PM2 app) |
+| Tunnel/DNS script | `scripts/setup-cloudflare.mjs` | 656 L | 001d `scripts/setup-cloudflare.mjs` — **delete the Access-app block** (decision 2) |
+| Tunnel library | `lib/cloudflare.ts` | 374 L | 001d token/tunnel/ingress/CNAME helpers |
+| Playwright config | `playwright.config.ts` | 50 L | 001c (random-port + webServer pattern) |
+| E2E helpers | `e2e/helpers.ts` | — | 001c style reference |
+| Server shape | `server.ts` | — | 001a structure/naming reference (no build step, `node server.ts`) |
+
+### 1.10 Worktrees, branches, test ports (the fan-out mechanics)
+
+- Worktree: `git worktree add ~/dev/poker-<letter>-work -b poker/<letter>-<slug>` from
+  `~/dev/poker` — so **`~/dev/poker-a-work` … `~/dev/poker-f-work`** (one letter, matching the
+  sub-ticket; the earlier `poker-aa-work` style was a typo).
+- Each slice runs its own e2e on a **port it discovers itself** (`net.listen(0)`); never a shared
+  fixed port, never 64100 (that is the g2 tunnel origin only).
+- Each slice uses its own `DATA_DIR` (a fresh temp dir) so parallel suites never share room files.
+- On landing: merge to `main` here, remove the worktree, delete the branch, then close the ticket —
+  one landing at a time, never batched (per `~/dev/agent.md`).
 
 ---
 
@@ -210,12 +268,18 @@ LIVE=1 npm run test:e2e:live   # gated smoke against the deployed origin
 E2E must use **two independent browser contexts** in one room and assert the **WebSocket frames**
 for the anonymity rules, not only what is painted.
 
-## 5. Open items for the user
+## 5. Open items
 
-1. **LGPL text** — the user will share it; license file + SPDX identifier is a placeholder until
-   then. Which version (LGPL-2.1 vs **LGPL-3.0**), and the copyright holder name?
-2. **GitHub repo** `311ecode/poker` — created in `001a` (needs the user's go-ahead).
-3. **`instances: 1` is mandatory** (in-memory room state). Accept the single-process ceiling now.
+**Blocking — cannot start:**
+1. **[B1] The GitHub repo `311ecode/poker` does not exist.** `git push` fails with *"Repository not
+   found"* (verified 2026-09-13). Everything is committed locally and `origin` is already set, so
+   the moment the user creates the empty repo, `git push -u origin main` works. No sub-ticket can
+   land (and 001a AC1 cannot be ticked) until then.
+
+**Non-blocking — answer when convenient:**
+2. **[N1] LGPL text** — the user will share it. Version (LGPL-2.1 vs **LGPL-3.0**) and copyright holder
+   name. Until then `LICENSE` is a placeholder; **do not invent a holder**.
+3. **[N2] `instances: 1` is mandatory** (in-memory room state). Accept the single-process ceiling now.
 
 ## Done checklist
 

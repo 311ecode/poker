@@ -70,6 +70,10 @@ origin and joins it from two sockets — the AC9 proof.
 
 - `pm2` is **not on PATH** on g2; it lives in the app's `node_modules/.bin`. Use
   `PM2_HOME=… node_modules/.bin/pm2`.
+- Copy and adapt the parent §1.9 assets rather than writing them fresh — `scripts/pm2-start.sh`
+  must pin **`/home/imre/.nvm/versions/node/v26.8.1/bin`** (offtube's says v24.15.0), and
+  `scripts/setup-cloudflare.mjs` must **drop the Access-app block** (decision 2).
+- Zone `imre.dev`; the zone id is in `menu/infrastructure/inventory/catalog.json` → `zones`.
 - The creator token is a **bootstrap** credential: use it only to mint the scoped token, never
   store it in the repo or in `~/bash.sh/state`.
 - Do **not** copy offtube's Access-app block. Blast radius of a public no-auth app: apply the

@@ -5,7 +5,8 @@ visible … the order of the voters are random, each person is the last one."*
 **Parent:** [POKER-001](POKER-001-poker-imre-dev-realtime-voting-app.md) — §1.2 rules, §1.4 frames.
 **Repo:** `311ecode/poker` (worktree `~/dev/poker-e-work`, own branch).
 **Depends on:** 182a's protocol stub. **Parallel with:** 182b, 182c, 182d.
-**Owns:** `lib/asciiFont.ts`, `public/style.css`, the presentation half of `public/app.js`.
+**Owns:** `lib/asciiFont.ts` and **`public/style.css` end to end** (parent §1.6 CSS rule — 001c
+leaves `/* POKER-001e: style this */` markers and creates no stylesheet).
 
 ## Summary
 

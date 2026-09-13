@@ -71,6 +71,10 @@ LIVE=1 npm run test:e2e:live
   `localStorage`, which is exactly why the My-Rooms test must run per-context.
 - The client is the only place that writes `localStorage["poker.myrooms"]`; the server must never
   grow a "recent rooms" endpoint.
+- Session/name/My-Rooms keys and the session id format are frozen in parent §1.7 — use them
+  verbatim so 001a and the e2e helpers agree.
+- **Do not create or edit `public/style.css`** (parent §1.6): leave markup + a
+  `/* POKER-001e: style this */` marker. That is the one shared file between 001c and 001e.
 
 ## Done checklist
 

@@ -19,7 +19,8 @@ type-stripping (`node server.ts`), exactly like offtube.
 
 ## Requirements / Acceptance criteria
 
-- [ ] **AC1** Repo `311ecode/poker` exists (name approved by the user), with `package.json`
+- [ ] **AC1** **BLOCKED until the user creates `311ecode/poker` on GitHub** (parent §5 item [B1]). Then:
+      repo exists, with `package.json`
       (`type: module`, `engines.node >= 26.8.1`), `.gitignore` (`data/`, `.pm2/`, `.pw-browsers/`,
       `.cloudflared/`, `.env`), and a LICENSE placeholder (LGPL — **text from the user**, see parent §5).
 - [ ] **AC2** `node server.ts` serves `public/` and answers `GET /api/health` →
@@ -63,8 +64,14 @@ npm test          # node --test; each test boots the server on port 0 with a tem
 
 ## Notes for the implementer
 
-- Read `~/dev/offtube/server.ts` + `playwright.config.ts` first; mirror its structure, naming and
-  the no-build Node-24 style.
+- Read `~/dev/offtube/server.ts` first; mirror its structure, naming and no-build style. Parent
+  §1.9 lists **every** reference asset with its size (pm2-start, both systemd units,
+  `setup-cloudflare.mjs`, `lib/cloudflare.ts`, `playwright.config.ts`) — copy, don't invent.
+- **Transport: hand-rolled WebSocket over `http`'s `upgrade` event, zero runtime dependencies**
+  (parent §1.8). Text frames, ping/pong, close, 7/16/64-bit lengths, and **unmasking of masked
+  client frames** are required. Do not add `ws` without escalating.
+- Session id format and the client `localStorage` keys are frozen in parent §1.7 — accept them as
+  given in `hello`; do not invent a second scheme.
 - `Net`-level details: `server.on("upgrade", …)`, reject upgrades for unknown paths with 404, and
   keep a per-connection map `session → socket` for presence broadcasts.
 - The `lib/db.ts` interface (owned by 182b) is frozen in the parent §1.1; code against it, and if
