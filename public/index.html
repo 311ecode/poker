@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>poker</title>
+    <!--
+      POKER-001e: style this. This ticket (001c) ships UNSTYLED markup only.
+      001e owns public/style.css end to end — add the <link rel="stylesheet">
+      call site here and style the data-* hooks below.
+    -->
+    <style>
+      /* POKER-001e: style this */
+    </style>
+  </head>
+  <body data-view="home">
+    <header>
+      <!-- POKER-001e: replace with the Matrix-style ASCII banner (001e unit-tests the font). -->
+      <h1 data-banner>poker</h1>
+      <p>connection: <span data-connection="closed">closed</span></p>
+      <p data-error="" role="alert" hidden></p>
+    </header>
+
+    <main>
+      <!-- =============================== HOME =============================== -->
+      <section data-panel="home">
+        <form data-form="join">
+          <h2>Join a room</h2>
+          <label>Room code <input data-input="join-code" name="code" autocomplete="off" /></label>
+          <label>
+            Passcode (only if the room has one)
+            <input data-input="join-passcode" name="passcode" type="password" autocomplete="off" />
+          </label>
+          <button type="submit" data-action="join">Join</button>
+        </form>
+
+        <form data-form="create">
+          <h2>Create a room</h2>
+          <label>Title <input data-input="create-title" name="title" autocomplete="off" /></label>
+          <label>
+            Passcode (optional)
+            <input data-input="create-passcode" name="passcode" autocomplete="off" />
+          </label>
+          <label><input type="checkbox" data-input="create-public" checked /> Public (findable)</label>
+          <button type="submit" data-action="create">Create room</button>
+        </form>
+
+        <section data-section="find">
+          <h2>Find rooms</h2>
+          <button type="button" data-action="find-rooms">Find rooms</button>
+          <ul data-rooms></ul>
+        </section>
+
+        <section data-section="my-rooms">
+          <h2>My rooms</h2>
+          <!-- [data-my-rooms] items carry data-my-room-code + data-last-visit, most-recent-first. -->
+          <ul data-my-rooms></ul>
+        </section>
+      </section>
+
+      <!-- =============================== ROOM =============================== -->
+      <section data-panel="room" hidden>
+        <p>
+          <button type="button" data-action="home">Home</button>
+          Room <strong data-room-code></strong> — <span data-room-title></span>
+        </p>
+
+        <form data-form="retry-join">
+          <label>
+            Passcode <input data-input="room-passcode" type="password" autocomplete="off" />
+          </label>
+          <button type="submit" data-action="retry-join">Join room</button>
+        </form>
+
+        <form data-form="claim">
+          <h2>Claim a name</h2>
+          <label>Name <input data-input="name" autocomplete="off" maxlength="24" /></label>
+          <button type="submit" data-action="claim-name">Claim name</button>
+        </form>
+        <p>
+          You are <strong data-you-name></strong>
+          (<code data-you-session></code>)
+        </p>
+
+        <section data-section="members">
+          <h2>Members</h2>
+          <!-- [data-member] items carry data-member-session / data-member-name / data-member-online. -->
+          <ul data-members></ul>
+        </section>
+
+        <form data-form="open-vote">
+          <h2>Open a vote</h2>
+          <label>Question <input data-input="vote-title" autocomplete="off" /></label>
+          <label>
+            Options (one per line)
+            <textarea data-input="vote-options" rows="4"></textarea>
+          </label>
+          <button type="submit" data-action="open-vote">Open vote</button>
+        </form>
+
+        <section data-section="votes">
+          <h2>Votes</h2>
+          <!--
+            [data-vote] cards carry data-vote-id + data-vote-state.
+            While state="open" the card MUST NOT contain a member name or a
+            per-person choice — counts + votedCount only (parent §1.2 R1/R2).
+          -->
+          <div data-votes></div>
+        </section>
+
+        <section data-section="history">
+          <h2>History</h2>
+          <button type="button" data-action="load-history">Load history</button>
+          <!-- [data-history-vote] items carry data-history-vote-id + data-history-state. -->
+          <div data-history></div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
