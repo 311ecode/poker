@@ -221,7 +221,7 @@ the moment `a` lands a protocol stub. `001f` is gated on `d` being live.
 | **[001c](POKER-001c-browser-client-e2e.md)** | browser client + Playwright from zero, multi-context realtime e2e | poker | a (protocol stub) | b, d, e |
 | **[001d](../done/POKER-001d-deploy-g2-pm2-tunnel.md)** | deploy on g2: PM2 + systemd keeper + Cloudflare tunnel | poker | a | b, c, e |
 | **[001e](POKER-001e-ascii-ui.md)** | Matrix-style ASCII banner font + screens + theme | poker | a (protocol stub) | b, c, d |
-| **[001f](POKER-001f-fleet-descriptor-catalog.md)** | fleet descriptor + catalog onboarding (menu repo) | menu | d live | — |
+| **[001f](../done/POKER-001f-fleet-descriptor-catalog.md)** | fleet descriptor + catalog onboarding (menu repo) | menu | d live | — |
 
 **Coordination (per `~/dev/agent.md` and this repo's `AGENTS.md`):**
 - One sub-ticket = one git worktree (`~/dev/poker-a-work`, `…-b-work`, …), own branch, own test port.
