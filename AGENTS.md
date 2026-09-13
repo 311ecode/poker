@@ -6,6 +6,13 @@ runs self-supervised on `hp-zbook-17-g2` (like `offtube`/music.imre.dev), is pub
 own Cloudflare tunnel at **https://poker.imre.dev**, and is registered in the fleet inventory so
 the dashboard shows it.
 
+**Voting contract (POKER-002):** every vote uses the **one server-owned deck — `0, 0.5, 1, 2, 3, 5,
+8, 13`**; `vote_open` carries only a title and a client-supplied `options` list is ignored. A
+**claimed name is mandatory** for `vote_open`/`vote_cast`/`vote_change`/`vote_close`/`vote_reopen`
+and is **permanent per room** (`name_required` / `name_locked`); re-claiming the same name is
+idempotent. The viewer's own ballot is remembered **client-side only** (localStorage per room) —
+never echo a per-person choice on the wire.
+
 It is a **sibling project**, not dashboard work: **no `DASH-…` tickets, no `menu-ctl.sh`, no
 reconcile, no per-env slice.** Work is tracked as **`POKER-…`** tickets in this repo.
 
