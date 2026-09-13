@@ -41,4 +41,57 @@ test.describe("live smoke against the deployed origin", () => {
       await context.close();
     }
   });
+
+  // POKER-002 verified on the DEPLOYED origin: the fixed deck, the name gate
+  // and a visible own vote (the local suite proves the same behaviours offline).
+  test("POKER-002 live: fixed deck, name gate and visible own vote", async ({ browser, request }) => {
+    const created = await request.post(`${ORIGIN}/api/rooms`, {
+      data: { title: uniqueTitle("live-deck"), public: true },
+    });
+    expect(created.status(), "POST /api/rooms").toBe(200);
+    const code = ((await created.json()) as { room: { code: string } }).room.code;
+
+    const named = await browser.newContext();
+    const anon = await browser.newContext();
+    try {
+      const voter = await named.newPage();
+      await voter.goto(`${ORIGIN}/#/room/${code}`);
+      await expect(voter.locator("[data-connection]")).toHaveAttribute("data-connection", "open");
+      await voter.locator('[data-input="name"]').fill("LiveVoter");
+      await voter.locator('[data-action="claim-name"]').click();
+      await expect(voter.locator("[data-you-name]")).toHaveText("LiveVoter");
+
+      // An unnamed visitor is gated: claim form only, no vote form.
+      const guest = await anon.newPage();
+      await guest.goto(`${ORIGIN}/#/room/${code}`);
+      await expect(guest.locator("[data-connection]")).toHaveAttribute("data-connection", "open");
+      await expect(guest.locator('[data-form="claim"]')).toBeVisible();
+      await expect(guest.locator('[data-form="open-vote"]')).toBeHidden();
+
+      // The fixed, server-owned deck.
+      await voter.locator('[data-input="vote-title"]').fill("Live estimate");
+      await voter.locator('[data-action="open-vote"]').click();
+      const card = voter.locator("[data-vote]").last();
+      await expect(card).toHaveAttribute("data-vote-state", "open");
+      await expect(card.locator("[data-choice]")).toHaveText([
+        "0 (0)",
+        "0.5 (0)",
+        "1 (0)",
+        "2 (0)",
+        "3 (0)",
+        "5 (0)",
+        "8 (0)",
+        "13 (0)",
+      ]);
+      await expect(guest.locator("[data-vote]").last().locator('[data-choice="3"]')).toBeDisabled();
+
+      // Cast 3 → my own vote is stated and marked.
+      await card.locator('[data-choice="3"]').click();
+      await expect(card.locator("[data-your-choice]")).toHaveText("3");
+      await expect(card.locator('[data-choice="3"]')).toHaveAttribute("data-self-choice", "true");
+    } finally {
+      await named.close();
+      await anon.close();
+    }
+  });
 });
