@@ -29,6 +29,11 @@ Public: **https://poker.imre.dev** (via a Cloudflare tunnel on `hp-zbook-17-g2`)
 | Deploy | PM2 (project-local `PM2_HOME`) kept alive by an app-owned systemd **user** unit; `cloudflared` as its own user unit |
 | License | **SSPL-1.0** — internal use and self-hosting free; offering it to third parties as a service requires releasing the whole stack ([plain English](RESTRICTIONS.md)) |
 
+## Deploy
+
+**`instances: 1` is mandatory** — room state is in memory, so a second instance would serve a
+different world. Full deploy notes land with [POKER-001d](tickets/new/POKER-001d-deploy-g2-pm2-tunnel.md).
+
 ## Work plan
 
 `POKER-001` is the parent (frozen contract + coordination). Six sub-tickets run in parallel,
