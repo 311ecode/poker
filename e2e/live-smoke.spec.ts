@@ -73,6 +73,8 @@ test.describe("live smoke against the deployed origin", () => {
       // The fixed, server-owned deck, chosen from a select (POKER-004).
       await voter.locator('[data-input="vote-title"]').fill("Live estimate");
       await voter.locator('[data-action="open-vote"]').click();
+      // POKER-012: the question box is consumed by the open.
+      await expect(voter.locator('[data-input="vote-title"]')).toHaveValue("");
       const card = voter.locator("[data-vote]").last();
       await expect(card).toHaveAttribute("data-vote-state", "open");
       await expect(card.locator("[data-choice-select] option[data-choice]")).toHaveText([

@@ -170,7 +170,12 @@
             <h2>Open a vote</h2>
             <label>
               Question (optional)
-              <input data-input="vote-title" autocomplete="off" placeholder="Leave empty for “Vote 1”" />
+              <input
+                data-input="vote-title"
+                autocomplete="off"
+                maxlength="80"
+                placeholder="Leave empty for “Vote 1”"
+              />
             </label>
             <p class="hint">
               Every vote uses the fixed deck 0, 0.5, 1, 2, 3, 5, 8, 13. An empty question is numbered

@@ -1111,7 +1111,12 @@ $('[data-form="open-vote"]').addEventListener("submit", (event) => {
     return;
   }
   // POKER-002 AC1: the deck is server-owned; only the question is sent.
-  send({ t: "vote_open", title: els.voteTitle.value.trim() });
+  // POKER-012: once it is on the wire the box is consumed — clear it so the next
+  // vote starts empty. Only this opener clears (vote_new is a broadcast, so
+  // reacting to it would wipe someone else's half-typed question).
+  if (send({ t: "vote_open", title: els.voteTitle.value.trim() })) {
+    els.voteTitle.value = "";
+  }
 });
 
 $('[data-action="load-history"]').addEventListener("click", () => {

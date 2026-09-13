@@ -114,13 +114,38 @@ test("POKER-010: an empty question auto-numbers the vote", async ({ browser, req
     await page.locator('[data-action="open-vote"]').click();
     await expect(page.locator("[data-vote]").last().locator("[data-vote-title]")).toHaveText("Vote 2");
 
-    // A typed question still wins.
+    // A typed question still wins…
     await page.locator('[data-input="vote-title"]').fill("Custom question");
     await page.locator('[data-action="open-vote"]').click();
     await expect(page.locator("[data-vote]").last().locator("[data-vote-title]")).toHaveText(
       "Custom question",
     );
+    // …and POKER-012: the box is consumed, ready for the next vote.
+    await expect(page.locator('[data-input="vote-title"]')).toHaveValue("");
   } finally {
     await context.close();
+  }
+});
+
+test("POKER-012: another member's new vote does not clear my typing", async ({ browser, request }) => {
+  const room = await createRoomViaApi(request, { title: uniqueTitle("keepdraft") });
+  const contextA = await browser.newContext();
+  const contextB = await browser.newContext();
+  try {
+    const a = await connectRoom(contextA, room.code, { name: "Alice" });
+    const b = await connectRoom(contextB, room.code, { name: "Bob" });
+
+    // Alice starts a question but has not opened it yet.
+    await a.page.locator('[data-input="vote-title"]').fill("Alice draft");
+
+    // Bob opens one → Alice receives the vote_new broadcast.
+    await openVote(b.page, "Bob question");
+    await expect(a.page.locator("[data-vote]")).toHaveCount(1);
+
+    // Her draft must survive it.
+    await expect(a.page.locator('[data-input="vote-title"]')).toHaveValue("Alice draft");
+  } finally {
+    await contextA.close();
+    await contextB.close();
   }
 });
