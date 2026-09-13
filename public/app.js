@@ -64,6 +64,7 @@ const state = {
   // client claims it silently in a new room and never re-claims where the server
   // already knows us. `claimRejected` re-opens the form if that name is taken.
   autoClaimSent: false,
+  autoClaimTimer: null,
   claimRejected: false,
   members: [],
   votes: new Map(), // id -> vote view (counts only while open)
@@ -93,6 +94,8 @@ window.__pokerLeaks = leakLog;
 const revealingVotes = new Set();
 const skippedReveals = new Set();
 const REVEAL_ANIMATION_MS = 2000;
+// POKER-006: how long a silent claim may take before the form is revealed anyway.
+const AUTO_CLAIM_GRACE_MS = 2500;
 
 // ---------------------------------------------------------------------------
 // dom
@@ -235,6 +238,7 @@ function setConnection(value) {
 function closeSocket() {
   clearTimeout(reconnectTimer);
   reconnectTimer = null;
+  clearAutoClaimTimer();
   const current = socket;
   socket = null;
   if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) {
@@ -299,21 +303,52 @@ function connect() {
 // protocol
 // ---------------------------------------------------------------------------
 
+/** Cancel a pending POKER-006 stall guard. */
+function clearAutoClaimTimer() {
+  if (state.autoClaimTimer) {
+    clearTimeout(state.autoClaimTimer);
+    state.autoClaimTimer = null;
+  }
+}
+
 /**
  * POKER-003: use the name burned into this browser, never re-claim it.
  * - the server already knows this session → `hello_ok.you.name` is used as-is;
  *   the client sends NO `claim` frame at all;
  * - a new room → claim the stored name once, silently;
  * - nothing stored, or the stored name was rejected here → the form is the path.
+ *
+ * POKER-006: the silent claim must never be a dead end. If it has not landed
+ * within the grace period the claim form is revealed, prefilled, so an unnamed
+ * visitor is never stuck (and never shown as a bare session id).
  */
 function autoClaimStoredName() {
+  if ((state.you.name ?? "") !== "") {
+    clearAutoClaimTimer();
+    return;
+  }
   if (state.route.name !== "room") return;
-  if ((state.you.name ?? "") !== "") return;
   if (state.autoClaimSent || state.claimRejected) return;
   const stored = readName(storage).trim();
   if (stored === "") return;
   state.autoClaimSent = true;
-  if (!send({ t: "claim", name: stored })) state.autoClaimSent = false;
+  if (!send({ t: "claim", name: stored })) {
+    state.autoClaimSent = false;
+    return;
+  }
+  const roomAtSend = state.roomCode;
+  clearAutoClaimTimer();
+  state.autoClaimTimer = setTimeout(() => {
+    state.autoClaimTimer = null;
+    const stuck =
+      state.roomCode === roomAtSend &&
+      state.route.name === "room" &&
+      (state.you.name ?? "") === "";
+    if (stuck) {
+      state.claimRejected = true;
+      renderChrome();
+    }
+  }, AUTO_CLAIM_GRACE_MS);
 }
 
 function handleMessage(message) {
@@ -346,6 +381,7 @@ function handleMessage(message) {
     case "claim_ok": {
       state.you = { session: message.you?.session ?? state.you.session, name: message.you?.name ?? "" };
       state.claimRejected = false;
+      clearAutoClaimTimer();
       writeName(storage, state.you.name);
       clearError();
       renderYou();
@@ -415,12 +451,14 @@ function handleMessage(message) {
       return;
     case "error": {
       const code = typeof message.code === "string" ? message.code : "server_error";
-      // POKER-003: a stored name that this room refuses (taken / locked) must
-      // re-open the form so the visitor can pick a different one.
+      // POKER-006: an unnamed visitor must never be left with no way to claim.
+      // Any refusal except "you are not in this room" re-opens the form (a taken
+      // or locked stored name included).
+      const admission = ["bad_passcode", "bad_room", "bad_session", "not_in_room"];
       if (
         state.route.name === "room" &&
         (state.you.name ?? "") === "" &&
-        ["name_taken", "name_locked", "bad_name", "name_too_long"].includes(code)
+        !admission.includes(code)
       ) {
         state.claimRejected = true;
       }
@@ -485,6 +523,7 @@ function applyRoute() {
       // in a PREVIOUS room must not keep the form hidden here.
       state.autoClaimSent = false;
       state.claimRejected = false;
+      clearAutoClaimTimer();
       // POKER-002: this browser's own ballots, restored so "my vote" survives
       // a reload and a vote reopen. Client-only mirror of the server ballot.
       state.selfChoices = new Map(readSelfChoices(storage, route.code));
@@ -556,7 +595,14 @@ function renderChrome() {
 
   if (els.claimForm && els.claimSlot) {
     if (claimable) {
-      if (!els.claimForm.isConnected) els.claimSlot.append(els.claimForm);
+      if (!els.claimForm.isConnected) {
+        els.claimSlot.append(els.claimForm);
+        // POKER-006: prefill the stored name whenever the form (re)appears, not
+        // only at module boot — entering a room is a hash change, not a reload,
+        // so a rejected stored name must still be editable here. Never clobber
+        // something the visitor has already typed.
+        if (els.nameInput && els.nameInput.value === "") els.nameInput.value = storedName;
+      }
       els.claimForm.hidden = false;
     } else if (els.claimForm.isConnected) {
       els.claimForm.remove();
@@ -576,7 +622,8 @@ function renderMembers() {
       "data-member-name": member.name,
       "data-member-online": member.online ? "true" : "false",
     });
-    li.textContent = `${member.name || member.session}${member.online ? " (online)" : ""}`;
+    // POKER-006: never show a bare session id — an unnamed member says so.
+    li.textContent = `${member.name || "not named yet"}${member.online ? " (online)" : ""}`;
     return li;
   });
   els.members.replaceChildren(...items);

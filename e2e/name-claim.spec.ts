@@ -115,3 +115,81 @@ test("POKER-003: a claimed name is burned into the browser and used, never re-cl
     await context.close();
   }
 });
+
+// ---------------------------------------------------------------------------
+// POKER-006: an unnamed visitor can always claim, and is never a raw UUID
+// ---------------------------------------------------------------------------
+
+test("POKER-006: an unnamed member reads 'not named yet', never a raw session id", async ({ browser, request }) => {
+  const room = await createRoomViaApi(request, { title: uniqueTitle("unnamed") });
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await enterRoom(page, room.code);
+    await expectConnection(page, "open");
+    const member = page.locator("[data-member]").first();
+    await expect(member).toContainText("not named yet");
+    await expect(member).not.toContainText("s-");
+  } finally {
+    await context.close();
+  }
+});
+
+test("POKER-006: a stored name this room refuses re-opens the form, prefilled", async ({ browser, request }) => {
+  const room = await createRoomViaApi(request, { title: uniqueTitle("taken") });
+  const holderContext = await browser.newContext();
+  const context = await browser.newContext();
+  try {
+    const holder = await holderContext.newPage();
+    await enterRoom(holder, room.code);
+    await claimName(holder, "Holder");
+    await expect(holder.locator("[data-you-name]")).toHaveText("Holder");
+
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.evaluate(() => localStorage.setItem("poker.name", "Holder"));
+    await enterRoom(page, room.code);
+    await expectError(page, "name_taken");
+    await expect(page.locator('[data-form="claim"]')).toBeVisible();
+    await expect(page.locator('[data-input="name"]')).toHaveValue("Holder");
+  } finally {
+    await context.close();
+    await holderContext.close();
+  }
+});
+
+test("POKER-006: a silent claim that never lands still lets you claim", async ({ browser, request }) => {
+  const room = await createRoomViaApi(request, { title: uniqueTitle("stall") });
+  const context = await browser.newContext();
+  try {
+    // Seed the stored name before the app boots, and install the socket route
+    // BEFORE the first navigation so the page's WebSocket is intercepted.
+    await context.addInitScript(() => localStorage.setItem("poker.name", "Stalled"));
+    const page = await context.newPage();
+    // Swallow every `claim` the page sends, so the silent auto-claim never lands
+    // while hello/hello_ok still flow normally.
+    await page.routeWebSocket(/\/ws$/, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage((message) => {
+        const text = typeof message === "string" ? message : message.toString();
+        let json: Record<string, any> | null = null;
+        try {
+          json = JSON.parse(text) as Record<string, any>;
+        } catch {
+          json = null;
+        }
+        if (json?.t === "claim") return; // dropped on the floor
+        server.send(message);
+      });
+      server.onMessage((message) => ws.send(message));
+    });
+
+    await enterRoom(page, room.code);
+    await expectConnection(page, "open");
+    // Unnamed and the claim was swallowed → the form appears within the grace.
+    await expect(page.locator('[data-form="claim"]')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('[data-input="name"]')).toHaveValue("Stalled");
+  } finally {
+    await context.close();
+  }
+});
