@@ -1,0 +1,534 @@
+/* public/style.css — the poker look (POKER-001e — this file is owned by 001e
+ * end to end; 001c deliberately created none).
+ *
+ * Matrix-style: a dark (or light) monospace room with a generated block-letter
+ * banner on every screen. Everything a spec needs is a `data-*` attribute, so
+ * this file carries no test hooks of its own.
+ *
+ * Theme tokens (WCAG contrast measured, see e2e/presentation.spec.ts):
+ *   light  text/bg 15.1:1  muted/bg 6.9:1  accent(banner)/bg 6.1:1  button 6.6:1
+ *   dark   text/bg 16.6:1  muted/bg 10.5:1 accent(banner)/bg 14.5:1 button 14.3:1
+ *
+ * Breakpoint (AC9): a five-row banner is (5 * width-of-text + gaps) cells wide
+ * and cannot fit a phone. At max-width 480px the <pre> is replaced by the
+ * single-row letterspaced `.banner-compact` treatment; the breakpoint value is
+ * mirrored in app.js (`matchMedia("(max-width: 480px)")`) so the
+ * `data-banner-mode` hook always agrees with the CSS.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --mono: "DejaVu Sans Mono", ui-monospace, SFMono-Regular, "Liberation Mono",
+    Menlo, Consolas, "Courier New", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* light theme (default) */
+  --bg: #f3f6f2;
+  --panel: #ffffff;
+  --text: #10231a;
+  --muted: #47594e;
+  --border: #c3cfc5;
+  --accent: #0b6b34;
+  --accent-contrast: #ffffff;
+  --ink: #0b6b34;
+  --alert-bg: #fdecec;
+  --alert-text: #8a1b1b;
+  --ok: #0b6b34;
+  --warn: #7a4a00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #05130c;
+    --panel: #0a1f14;
+    --text: #d8f7e3;
+    --muted: #a6c9b3;
+    --border: #1e4a30;
+    --accent: #45ff96;
+    --accent-contrast: #04150c;
+    --ink: #45ff96;
+    --alert-bg: #2a1010;
+    --alert-text: #ffb3b3;
+    --ok: #45ff96;
+    --warn: #ffd479;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  /* The layout is width-safe by construction; keep a stray glyph from ever
+   * giving the page a horizontal scrollbar (AC9). */
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.45;
+  min-height: 100vh;
+}
+
+/* ------------------------------------------------------------------ header */
+
+.site-header {
+  padding: 0.75rem clamp(0.75rem, 3vw, 2rem) 0.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.site-header .connection {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+.alert {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--alert-text);
+  border-radius: 4px;
+  background: var(--alert-bg);
+  color: var(--alert-text);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ banner */
+
+.banner {
+  margin: 0.25rem 0 0.75rem;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* AC11: a <pre>, white-space: pre, line-height 1, monospace stack. */
+.banner-pre {
+  margin: 0;
+  padding: 0;
+  white-space: pre;
+  line-height: 1;
+  font-family: var(--mono);
+  font-size: clamp(0.5rem, 1.7vw, 0.95rem);
+  font-weight: 700;
+  font-variant-ligatures: none;
+  font-kerning: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+  letter-spacing: 0;
+  color: var(--ink);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+.banner-compact {
+  display: none;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+/* AC9 breakpoint: the folded banner cannot fit a phone, so one letterspaced
+ * line replaces it. Mirrored in app.js as (max-width: 480px). */
+@media (max-width: 480px) {
+  .banner-pre {
+    display: none;
+  }
+  .banner-compact {
+    display: block;
+  }
+}
+
+.banner--card .banner-pre {
+  font-size: clamp(0.4rem, 1.1vw, 0.72rem);
+}
+
+.banner--reveal .banner-pre {
+  color: var(--accent);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* ------------------------------------------------------------------ layout */
+
+main {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: clamp(0.75rem, 3vw, 1.5rem);
+}
+
+[data-panel] {
+  display: block;
+}
+
+section[data-section] {
+  margin: 1.25rem 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.2;
+}
+
+h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+h3 {
+  margin: 0.25rem 0;
+  font-size: 1rem;
+}
+
+.room-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+}
+
+.room-bar strong {
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+code,
+kbd {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ forms */
+
+form {
+  margin: 0 0 1rem;
+}
+
+label {
+  display: block;
+  margin: 0.4rem 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+  border-radius: 4px;
+}
+
+input,
+textarea {
+  display: block;
+  width: 100%;
+  max-width: 32rem;
+  margin-top: 0.15rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
+  margin: 0 0.35rem 0 0;
+}
+
+button {
+  margin: 0.25rem 0.35rem 0.25rem 0;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.12);
+}
+
+button:disabled,
+button[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+ul,
+ol {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+li {
+  margin: 0.25rem 0;
+}
+
+/* ------------------------------------------------------- lists + empty state */
+
+.empty {
+  margin: 0.5rem 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+[data-connection="closed"] {
+  color: var(--alert-text);
+}
+
+[data-connection="open"] {
+  color: var(--ok);
+}
+
+[data-empty] {
+  margin: 0.4rem 0;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ votes */
+
+[data-vote] {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+[data-vote][data-vote-state="closed"] {
+  border-left-color: var(--muted);
+}
+
+[data-options] {
+  list-style: none;
+  padding-left: 0;
+}
+
+[data-options] button {
+  min-width: 12rem;
+  text-align: left;
+}
+
+[data-self-choice="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tally {
+  margin: 0.5rem 0;
+}
+
+.tally p {
+  margin: 0 0 0.3rem;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+/* AC6: "N of M voted" progress, updates without a reload. */
+.progress {
+  position: relative;
+  height: 0.55rem;
+  max-width: 32rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 180ms ease-out;
+}
+
+/* AC5: anonymous voter strip while a vote is OPEN. */
+[data-voters] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding-left: 0;
+  list-style: none;
+}
+
+[data-voter] {
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  background: var(--bg);
+}
+
+[data-voter-self="true"] {
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ reveal */
+
+[data-reveal] {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+
+/* AC7: the animation animates ONLY the presentation; the text is in the DOM
+ * immediately. `prefers-reduced-motion` and the explicit Skip control both turn
+ * it off, and `data-reveal-animation` records which. */
+@keyframes poker-reveal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-0.4rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+[data-reveal][data-reveal-animation="on"] {
+  animation: poker-reveal-pop 900ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal][data-reveal-animation="on"] {
+    animation: none;
+  }
+  .progress-fill {
+    transition: none;
+  }
+}
+
+.result-bars {
+  margin: 0.6rem 0;
+}
+
+.result-bar {
+  display: grid;
+  grid-template-columns: minmax(4rem, 12rem) 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.result-bar-label {
+  overflow-wrap: anywhere;
+}
+
+.result-bar-track {
+  display: block;
+  height: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.result-bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+}
+
+.result-bar-value {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+
+[data-reveal-list] {
+  list-style: none;
+  padding-left: 0;
+}
+
+[data-reveal-entry] {
+  padding: 0.2rem 0;
+  border-bottom: 1px dotted var(--border);
+}
+
+/* ------------------------------------------------------------------ history */
+
+[data-history-vote] {
+  margin: 0.6rem 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+[data-history-vote][data-history-state="closed"] {
+  border-left: 4px solid var(--muted);
+}
+
+[data-history-vote][data-history-state="open"] {
+  border-left: 4px solid var(--accent);
+}
+
+[data-history-events] {
+  list-style: none;
+  padding-left: 0;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+[data-history-reveal] {
+  list-style: none;
+  padding-left: 0;
+}
+
+/* -------------------------------------------------------------- utility */
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

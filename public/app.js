@@ -1,4 +1,4 @@
-// public/app.js — the poker browser client (POKER-001c).
+// public/app.js — the poker browser client (POKER-001c, dressed by POKER-001e).
 //
 // Plain ES module, no bundler, no build step (AC11). It owns the WebSocket
 // (`/ws`), hash routing, the local My-Rooms store and every user flow: join,
@@ -8,7 +8,13 @@
 // `votedCount` and a NAME-FREE voter order. The server never sends names while
 // open (parent §1.2 R1/R2) and neither does this client — do not add a name to
 // the open vote card.
+//
+// POKER-001e adds only presentation: the generated ASCII banners (imported from
+// lib/asciiFont.ts — served as ./asciiFont.js), the per-screen empty/loading/
+// error states, the live tally, the reveal moment and the mobile fallback. No
+// protocol or state logic changed; every landed `data-*` hook is intact.
 
+import { renderBanner } from "./asciiFont.js";
 import { messageFor } from "./messages.js";
 import { openVoteViolations } from "./leakguard.js";
 import {
@@ -57,8 +63,10 @@ const state = {
   orders: new Map(), // id -> { order: [session], self }
   selfChoices: new Map(), // id -> choice this browser cast (local only)
   rooms: [],
+  roomsStatus: "idle", // idle | loading | ready | empty | error
   myRooms: readMyRooms(storage),
   history: [],
+  historyStatus: "idle", // idle | loading | ready | empty | error
 };
 
 // A debug buffer of every frame RECEIVED by this page. It supplements the e2e
@@ -71,6 +79,13 @@ window.__pokerFrames = receivedFrames;
 // cheap second pair of eyes and keeps the scanner on the real client path.
 const leakLog = [];
 window.__pokerLeaks = leakLog;
+
+// Votes whose close is being presented as the "reveal moment" right now, and
+// votes whose owner skipped that animation (AC7). Both are presentation-only:
+// the reveal data is in the DOM the moment the frame lands.
+const revealingVotes = new Set();
+const skippedReveals = new Set();
+const REVEAL_ANIMATION_MS = 2000;
 
 // ---------------------------------------------------------------------------
 // dom
@@ -87,6 +102,7 @@ const els = {
   error: $("[data-error]"),
   roomCode: $("[data-room-code]"),
   roomTitle: $("[data-room-title]"),
+  roomBanner: $("[data-room-banner]"),
   youName: $("[data-you-name]"),
   youSession: $("[data-you-session]"),
   members: $("[data-members]"),
@@ -94,6 +110,11 @@ const els = {
   myRooms: $("[data-my-rooms]"),
   rooms: $("[data-rooms]"),
   history: $("[data-history]"),
+  emptyRooms: $('[data-empty="rooms"]'),
+  emptyMyRooms: $('[data-empty="my-rooms"]'),
+  emptyMembers: $('[data-empty="members"]'),
+  emptyVotes: $('[data-empty="votes"]'),
+  emptyHistory: $('[data-empty="history"]'),
   joinCode: $('[data-input="join-code"]'),
   joinPasscode: $('[data-input="join-passcode"]'),
   createTitle: $('[data-input="create-title"]'),
@@ -113,6 +134,63 @@ function el(tag, attrs = {}, text) {
   }
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+// ---------------------------------------------------------------------------
+// banners (POKER-001e) — generated from lib/asciiFont.ts, never hand-drawn
+// ---------------------------------------------------------------------------
+
+// AC9: the banner folds below 480px. The value is mirrored in public/style.css;
+// `data-banner-mode` is the hook that proves the two agree.
+const COMPACT_QUERY = "(max-width: 480px)";
+const compactQuery = window.matchMedia(COMPACT_QUERY);
+const reduceMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+function bannerMode() {
+  return compactQuery.matches ? "compact" : "full";
+}
+
+/** Fill an existing banner block: <pre> block art + single-row compact text. */
+function setBannerText(container, text) {
+  if (!container) return;
+  const value = typeof text === "string" ? text : "";
+  container.setAttribute("data-banner-text", value);
+  container.setAttribute("aria-label", value || "banner");
+  const pre = container.querySelector("[data-banner-pre]");
+  const compact = container.querySelector("[data-banner-compact]");
+  if (pre) pre.textContent = renderBanner(value).join("\n");
+  if (compact) compact.textContent = value;
+  container.setAttribute("data-banner-mode", bannerMode());
+}
+
+/** Build a banner block (used for vote titles and the reveal moment). */
+function bannerNode(text, options = {}) {
+  const wrap = el("div", {
+    class: `banner ${options.className ?? ""}`.trim(),
+    "data-banner": "",
+    "data-banner-mode": bannerMode(),
+    role: "img",
+  });
+  wrap.append(
+    el("pre", { class: "banner-pre", "data-banner-pre": "", "aria-hidden": "true" }),
+    el("p", { class: "banner-compact", "data-banner-compact": "", "aria-hidden": "true" }),
+  );
+  for (const [key, value] of Object.entries(options.attrs ?? {})) wrap.setAttribute(key, value);
+  setBannerText(wrap, text);
+  return wrap;
+}
+
+/** Render the static banners declared in index.html (their text is in markup). */
+function renderStaticBanners() {
+  for (const node of $$("[data-banner][data-banner-text]")) {
+    if (node.hasAttribute("data-room-banner")) continue; // per-route, see renderRoute
+    setBannerText(node, node.getAttribute("data-banner-text"));
+  }
+}
+
+/** Keep every banner's mode hook in step with the CSS breakpoint. */
+function applyBannerMode() {
+  for (const node of $$("[data-banner]")) node.setAttribute("data-banner-mode", bannerMode());
 }
 
 // ---------------------------------------------------------------------------
@@ -221,6 +299,7 @@ function handleMessage(message) {
       writeLastRoom(storage, state.roomCode);
       state.myRooms = readMyRooms(storage);
       state.history = [];
+      state.historyStatus = "idle";
       renderAll();
       return;
     }
@@ -238,10 +317,31 @@ function handleMessage(message) {
     }
     case "vote_new":
     case "vote_update":
-    case "vote_closed":
     case "vote_reopened": {
       const vote = message.vote;
-      if (vote && typeof vote.id === "string") state.votes.set(vote.id, vote);
+      if (vote && typeof vote.id === "string") {
+        state.votes.set(vote.id, vote);
+        // Reopen (or a fresh vote) returns to the anonymous state (R6): no
+        // reveal and no reveal animation may linger.
+        revealingVotes.delete(vote.id);
+        skippedReveals.delete(vote.id);
+      }
+      renderVotes();
+      return;
+    }
+    case "vote_closed": {
+      const vote = message.vote;
+      if (vote && typeof vote.id === "string") {
+        state.votes.set(vote.id, vote);
+        // AC7: the reveal moment is presentation only — the data is rendered
+        // synchronously below; this timer only retires the CSS animation.
+        revealingVotes.add(vote.id);
+        skippedReveals.delete(vote.id);
+        const id = vote.id;
+        setTimeout(() => {
+          if (revealingVotes.delete(id)) renderVotes();
+        }, REVEAL_ANIMATION_MS);
+      }
       renderVotes();
       return;
     }
@@ -257,6 +357,7 @@ function handleMessage(message) {
     }
     case "rooms": {
       state.rooms = Array.isArray(message.rooms) ? message.rooms : [];
+      state.roomsStatus = state.rooms.length > 0 ? "ready" : "empty";
       renderRooms();
       return;
     }
@@ -267,6 +368,7 @@ function handleMessage(message) {
     }
     case "history": {
       state.history = Array.isArray(message.votes) ? message.votes : [];
+      state.historyStatus = state.history.length > 0 ? "ready" : "empty";
       renderHistory();
       return;
     }
@@ -286,6 +388,10 @@ function showError(code) {
   els.error.setAttribute("data-error", code);
   els.error.textContent = messageFor(code);
   els.error.hidden = false;
+  if (state.historyStatus === "loading") {
+    state.historyStatus = "error";
+    renderHistory();
+  }
 }
 
 function clearError() {
@@ -326,6 +432,10 @@ function applyRoute() {
       state.orders = new Map();
       state.selfChoices = new Map();
       state.members = [];
+      state.history = [];
+      state.historyStatus = "idle";
+      revealingVotes.clear();
+      skippedReveals.clear();
       connect();
     }
   } else {
@@ -364,6 +474,8 @@ function renderRoute() {
   els.roomCode.textContent = state.roomCode ?? "";
   els.roomTitle.textContent = state.room?.title ?? "";
   if (inRoom) els.roomPasscode.value = state.passcode ?? "";
+  // AC4: the room screen always has a banner — the room's own title, or ROOM.
+  setBannerText(els.roomBanner, (state.room?.title ?? "").trim() || "ROOM");
 }
 
 function renderYou() {
@@ -383,6 +495,8 @@ function renderMembers() {
     return li;
   });
   els.members.replaceChildren(...items);
+  els.members.setAttribute("data-members-state", items.length > 0 ? "ready" : "empty");
+  els.emptyMembers.hidden = items.length > 0;
 }
 
 /**
@@ -394,16 +508,42 @@ function voterLabel(index, isSelf) {
   return isSelf ? `Voter ${index + 1} (you)` : `Voter ${index + 1}`;
 }
 
+/** AC6: live "N of M voted" + progress, no per-person attribution while open. */
+function tallyBlock(vote) {
+  const voted = Number(vote.votedCount ?? 0);
+  const total = Number(vote.totalMembers ?? 0);
+  const tally = el("div", { class: "tally", "data-tally": "" });
+
+  const line = el("p", { class: "tally-line" });
+  line.append(el("span", { "data-voted-count": "" }, String(voted)));
+  line.append(document.createTextNode(" of "));
+  line.append(el("span", { "data-total-members": "" }, String(total)));
+  line.append(document.createTextNode(" voted"));
+  tally.append(line);
+
+  const progress = el("div", {
+    class: "progress",
+    "data-vote-progress": "",
+    role: "progressbar",
+    "aria-valuemin": "0",
+    "aria-valuemax": String(total),
+    "aria-valuenow": String(voted),
+  });
+  const fill = el("span", { class: "progress-fill", "data-progress-fill": "" });
+  fill.style.width = total > 0 ? `${Math.round((voted / total) * 100)}%` : "0%";
+  progress.append(fill);
+  tally.append(progress);
+  return tally;
+}
+
 function voteCard(vote) {
   const card = el("article", { "data-vote": "", "data-vote-id": vote.id, "data-vote-state": vote.state });
-  card.append(el("h3", { "data-vote-title": "" }, vote.title ?? ""));
+  // The vote title is a generated banner (AC4); the plain heading stays for
+  // assistive tech and for the landed hook vocabulary.
+  card.append(bannerNode(vote.title ?? "", { className: "banner--card", attrs: { "data-vote-banner": "" } }));
+  card.append(el("h3", { "data-vote-title": "", class: "visually-hidden" }, vote.title ?? ""));
 
-  const meta = el("p");
-  meta.append(el("span", { "data-voted-count": "" }, String(vote.votedCount ?? 0)));
-  meta.append(document.createTextNode(" / "));
-  meta.append(el("span", { "data-total-members": "" }, String(vote.totalMembers ?? 0)));
-  meta.append(document.createTextNode(" voted"));
-  card.append(meta);
+  card.append(tallyBlock(vote));
 
   const options = el("ul", { "data-options": "" });
   for (const option of vote.options ?? []) {
@@ -425,10 +565,10 @@ function voteCard(vote) {
   }
   card.append(options);
 
-  // While OPEN: a name-free voter order, per-viewer, self last.
+  // While OPEN: a name-free voter order, per-viewer, self last (R2/R3/R4, AC5).
   if (vote.state === "open") {
     const order = state.orders.get(vote.id)?.order ?? [];
-    const list = el("ol", { "data-voters": "" });
+    const list = el("ol", { "data-voters": "", "data-voters-count": String(order.length) });
     order.forEach((voterSession, index) => {
       const isSelf = voterSession === state.you.session;
       list.append(
@@ -439,6 +579,8 @@ function voteCard(vote) {
             "data-voter-session": voterSession,
             "data-voter-position": String(index + 1),
             "data-voter-self": isSelf ? "true" : "false",
+            // Explicit anonymity hook: an open-vote row never carries a name.
+            "data-voter-nameless": "true",
           },
           voterLabel(index, isSelf),
         ),
@@ -450,8 +592,46 @@ function voteCard(vote) {
   // Closed: names + choices are revealed to everyone (R5).
   if (vote.state === "closed") {
     const reveal = el("div", { "data-reveal": "" });
+    const animating = revealingVotes.has(vote.id) && !reduceMotionQuery.matches;
+    reveal.setAttribute(
+      "data-reveal-animation",
+      animating ? "on" : skippedReveals.has(vote.id) ? "skipped" : "off",
+    );
+
+    // The big-letter reveal moment (AC7). Text is present immediately; only the
+    // CSS animation is conditional.
+    reveal.append(
+      bannerNode("REVEAL", { className: "banner--reveal banner--card", attrs: { "data-reveal-banner": "" } }),
+    );
+
+    // Per-option bars, scaled to the winner.
+    const counts = vote.result ?? vote.counts ?? {};
+    const optionsList = vote.options?.length ? vote.options : Object.keys(counts);
+    const entries = optionsList.map((option) => [option, Number(counts[option] ?? 0)]);
+    const max = entries.reduce((top, [, count]) => Math.max(top, count), 0);
+    const bars = el("div", { class: "result-bars", "data-result-bars": "" });
+    for (const [option, count] of entries) {
+      const row = el("div", {
+        class: "result-bar",
+        "data-result-bar": "",
+        "data-result-option": option,
+        "data-result-count": String(count),
+      });
+      row.append(el("span", { class: "result-bar-label" }, option));
+      const track = el("span", { class: "result-bar-track" });
+      const fill = el("span", { class: "result-bar-fill", "data-result-fill": "" });
+      fill.style.width = max > 0 ? `${Math.round((count / max) * 100)}%` : "0%";
+      track.append(fill);
+      row.append(track);
+      row.append(el("span", { class: "result-bar-value", "data-result-value": "" }, String(count)));
+      bars.append(row);
+    }
+    reveal.append(bars);
+
+    // The named list, exactly the landed hook vocabulary.
     const list = el("ul", { "data-reveal-list": "" });
-    for (const entry of vote.reveal ?? []) {
+    const revealed = Array.isArray(vote.reveal) ? vote.reveal : [];
+    for (const entry of revealed) {
       list.append(
         el(
           "li",
@@ -464,7 +644,15 @@ function voteCard(vote) {
         ),
       );
     }
+    if (revealed.length === 0) {
+      list.append(el("li", { class: "empty", "data-empty": "reveal" }, "No ballots were cast."));
+    }
     reveal.append(list);
+
+    // AC7: the animation is skippable — and skipping never hides the data.
+    if (animating) {
+      reveal.append(el("button", { type: "button", "data-action": "skip-reveal" }, "Skip animation"));
+    }
     card.append(reveal);
   }
 
@@ -479,6 +667,8 @@ function voteCard(vote) {
 function renderVotes() {
   const cards = [...state.votes.values()].map((vote) => voteCard(vote));
   els.votes.replaceChildren(...cards);
+  els.votes.setAttribute("data-votes-state", cards.length > 0 ? "ready" : "empty");
+  els.emptyVotes.hidden = cards.length > 0;
 }
 
 function renderMyRooms() {
@@ -493,9 +683,12 @@ function renderMyRooms() {
     return li;
   });
   els.myRooms.replaceChildren(...items);
+  els.myRooms.setAttribute("data-my-rooms-state", items.length > 0 ? "ready" : "empty");
+  els.emptyMyRooms.hidden = items.length > 0;
 }
 
 function renderRooms() {
+  const status = state.roomsStatus;
   const items = state.rooms.map((room) => {
     const li = el("li", {
       "data-room-summary": "",
@@ -510,19 +703,40 @@ function renderRooms() {
     return li;
   });
   els.rooms.replaceChildren(...items);
+  els.rooms.setAttribute("data-rooms-state", status);
+  const messages = {
+    idle: "Press “Find rooms” to list public rooms.",
+    loading: "Loading rooms…",
+    empty: "No public rooms yet — create one.",
+    error: "Could not load rooms — try again.",
+    ready: "",
+  };
+  els.emptyRooms.textContent = messages[status] ?? "";
+  els.emptyRooms.hidden = status === "ready";
 }
 
 function renderHistory() {
+  const status = state.historyStatus;
   const items = state.history.map((vote) => {
+    const closed = vote.state === "closed";
     const li = el("li", {
       "data-history-vote": "",
       "data-history-vote-id": vote.id,
       "data-history-state": vote.state,
+      "data-history-final": closed ? "true" : "false",
     });
     li.append(el("h4", {}, vote.title ?? ""));
-    const counts = el("p", { "data-history-counts": "" },
-      Object.entries(vote.counts ?? {}).map(([choice, count]) => `${choice}: ${count}`).join(", "));
-    li.append(counts);
+    // Open votes in history carry counts only (no reveal); closed ones carry the
+    // final result (AC8).
+    li.append(
+      el(
+        "p",
+        { "data-history-counts": "" },
+        Object.entries(vote.counts ?? {})
+          .map(([choice, count]) => `${choice}: ${count}`)
+          .join(", "),
+      ),
+    );
     const events = el("ul", { "data-history-events": "" });
     for (const event of vote.events ?? []) {
       events.append(
@@ -550,6 +764,16 @@ function renderHistory() {
     return li;
   });
   els.history.replaceChildren(...items);
+  els.history.setAttribute("data-history-state", status);
+  const messages = {
+    idle: "History not loaded yet — press “Load history”.",
+    loading: "Loading history…",
+    empty: "No votes in this room yet.",
+    error: "Could not load history — try again.",
+    ready: "",
+  };
+  els.emptyHistory.textContent = messages[status] ?? "";
+  els.emptyHistory.hidden = status === "ready";
 }
 
 // ---------------------------------------------------------------------------
@@ -590,14 +814,18 @@ async function createRoom() {
 }
 
 async function findRooms() {
+  state.roomsStatus = "loading";
+  renderRooms();
   try {
     const response = await fetch("/api/rooms");
     const body = await response.json();
     state.rooms = Array.isArray(body.rooms) ? body.rooms : [];
-    renderRooms();
+    state.roomsStatus = state.rooms.length > 0 ? "ready" : "empty";
   } catch {
+    state.roomsStatus = "error";
     showError("server_error");
   }
+  renderRooms();
 }
 
 function castVote(voteId, choice) {
@@ -649,7 +877,13 @@ $('[data-form="open-vote"]').addEventListener("submit", (event) => {
 });
 
 $('[data-action="load-history"]').addEventListener("click", () => {
-  send({ t: "history", room: state.roomCode });
+  state.historyStatus = "loading";
+  renderHistory();
+  if (!send({ t: "history", room: state.roomCode })) {
+    state.historyStatus = "error";
+    showError("server_error");
+    renderHistory();
+  }
 });
 
 els.votes.addEventListener("click", (event) => {
@@ -664,6 +898,12 @@ els.votes.addEventListener("click", (event) => {
   const action = target.getAttribute("data-action");
   if (action === "close-vote") send({ t: "vote_close", voteId });
   else if (action === "reopen-vote") send({ t: "vote_reopen", voteId });
+  else if (action === "skip-reveal") {
+    // AC7: skipping is presentation only — the reveal data stays on screen.
+    revealingVotes.delete(voteId);
+    skippedReveals.add(voteId);
+    renderVotes();
+  }
 });
 
 for (const container of [els.myRooms, els.rooms]) {
@@ -679,6 +919,8 @@ document.querySelector('[data-action="home"]').addEventListener("click", () => {
 });
 
 window.addEventListener("hashchange", () => applyRoute());
+// The banner's mobile fallback is a CSS breakpoint; keep the mode hook honest.
+compactQuery.addEventListener?.("change", () => applyBannerMode());
 
 // debug/test hook: the e2e robustness spec needs to put a hostile payload on
 // the real socket. This is the ONLY test-only surface (AC10).
@@ -711,4 +953,6 @@ if (!readSession(storage)) {
   ensureSession(storage, window.crypto);
 }
 setConnection("closed");
+renderStaticBanners();
+applyBannerMode();
 applyRoute();
