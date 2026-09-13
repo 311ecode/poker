@@ -9,11 +9,13 @@ the dashboard shows it.
 **Voting contract (POKER-002/004):** every vote uses the **one server-owned deck — `0, 0.5, 1, 2, 3,
 5, 8, 13`**; `vote_open` carries only a title and a client-supplied `options` list is ignored. The
 value is chosen from **one `<select>`** (`data-choice-select`) and **sent the moment it changes** —
-there is no cast button; first change is `vote_cast`, later ones `vote_change`. A
-**claimed name is mandatory** for `vote_open`/`vote_cast`/`vote_change`/`vote_close`/`vote_reopen`
-and is **permanent per room** (`name_required` / `name_locked`); re-claiming the same name is
-idempotent. The viewer's own ballot is remembered **client-side only** (localStorage per room) —
-never echo a per-person choice on the wire.
+there is no cast button; first change is `vote_cast`, later ones `vote_change`. An **empty question is
+auto-numbered per room** — `Vote 1`, `Vote 2`, … derived from the vote id counter (POKER-010); a
+typed title wins. A **claimed name is mandatory** for
+`vote_open`/`vote_cast`/`vote_change`/`vote_close`/`vote_reopen` and is **permanent per room**
+(`name_required` / `name_locked`); re-claiming the same name is idempotent. The viewer's own ballot
+is remembered **client-side only** (localStorage per room) — never echo a per-person choice on the
+wire.
 
 **Name lifetime (POKER-003/005):** the claimed name is **burned into the browser** (`localStorage
 poker.name`) and reused automatically; in a room the server already knows this session in, the
