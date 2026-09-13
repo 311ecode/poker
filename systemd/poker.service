@@ -1,0 +1,38 @@
+# poker backend, owned by USER systemd and run through pm2, so it:
+#   - starts on boot without root (user unit, WantedBy=default.target),
+#   - auto-reloads on server-source changes (pm2 watch),
+#   - and is restarted by systemd if the pm2 daemon ever dies (Restart=always).
+#
+# Install (no sudo — user-level systemd):
+#   cp systemd/poker.service ~/.config/systemd/user/poker.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now poker
+# (or: npm run dev:systemd:install)
+#
+# Paths below are the fixed g2 install path /home/imre/dev/poker.
+
+[Unit]
+Description=poker — realtime voting rooms (pm2-managed)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=forking
+WorkingDirectory=/home/imre/dev/poker
+Environment=HOME=/home/imre
+Environment=PM2_HOME=/home/imre/dev/poker/.pm2
+Environment=PATH=/home/imre/.nvm/versions/node/v26.8.1/bin:/home/imre/.local/bin:/usr/local/bin:/usr/bin:/bin
+PIDFile=/home/imre/dev/poker/.pm2/pm2.pid
+ExecStart=/home/imre/dev/poker/scripts/pm2-start.sh
+ExecReload=/home/imre/dev/poker/node_modules/.bin/pm2 reload poker
+ExecStop=/home/imre/dev/poker/node_modules/.bin/pm2 kill
+# If the pm2 daemon dies, systemd brings it (and the app) right back.
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=poker
+
+[Install]
+WantedBy=default.target

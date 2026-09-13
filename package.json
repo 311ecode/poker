@@ -18,7 +18,7 @@
     "dev:systemd:uninstall": "systemctl --user disable --now poker && rm -f ~/.config/systemd/user/poker.service && systemctl --user daemon-reload",
     "dev:cloudflare:install": "node scripts/setup-cloudflare.mjs ensure",
     "dev:cloudflare:status": "node scripts/setup-cloudflare.mjs status",
-    "dev:cloudflare:uninstall": "systemctl --user disable --now cloudflared && rm -f ~/.config/systemd/user/cloudflared.service && systemctl --user daemon-reload",
+    "dev:cloudflare:uninstall": "systemctl --user disable --now poker-cloudflared && rm -f ~/.config/systemd/user/poker-cloudflared.service && systemctl --user daemon-reload",
     "test": "node --test",
     "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=\"$PWD/.pw-browsers\" playwright test",
     "test:e2e:live": "LIVE=1 PLAYWRIGHT_BROWSERS_PATH=\"$PWD/.pw-browsers\" playwright test e2e/live-smoke.spec.ts"

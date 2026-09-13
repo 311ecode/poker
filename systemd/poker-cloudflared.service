@@ -1,0 +1,27 @@
+# Cloudflare Tunnel for poker (poker.imre.dev) — USER systemd, no sudo.
+#
+# DELIBERATELY NOT named cloudflared.service: g2 already runs offtube's tunnel
+# under ~/.config/systemd/user/cloudflared.service (music.imre.dev). Installing
+# poker's tunnel at that name would overwrite it and take music.imre.dev down.
+# Same naming convention as the menu-pepper*-cloudflared.service units.
+#
+# Installed by scripts/setup-cloudflare.mjs; the run token lives in
+# /home/imre/dev/poker/.cloudflared/tunnel-token.env (0600, gitignored) and is
+# provisioned by the same script. cloudflared is NOT a pm2 app.
+
+[Unit]
+Description=Cloudflare Tunnel — poker.imre.dev (poker)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=/home/imre/dev/poker/.cloudflared/tunnel-token.env
+ExecStart=/home/imre/dev/poker/bin/cloudflared tunnel --no-autoupdate run
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=poker-cloudflared
+
+[Install]
+WantedBy=default.target
