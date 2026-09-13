@@ -3,7 +3,8 @@
 **Project:** poker (main) · **Created:** 2026-09-13
 **Reporter:** user — *"the opening a new vote shall be at the bottom of all votes… also if the user
 is voting [it] shall not jump to the top of the scroll; the scroller shall remain static."*
-**Status:** IN PROGRESS
+**Status:** **DONE** (2026-09-13) — landed on `main` (`8431b6c`), pushed, live on
+**https://poker.imre.dev** (form after `[data-votes]`, confirmed in the served HTML).
 
 ## 0. Decision
 
@@ -23,14 +24,14 @@ No protocol or server change.
 
 ## 1. Acceptance criteria
 
-- [ ] AC1 — In the room, `[data-form="open-vote"]` follows `[data-votes]` in DOM order; the empty
+- [x] AC1 — In the room, `[data-form="open-vote"]` follows `[data-votes]` in DOM order; the empty
   state says "open one below".
-- [ ] AC2 — Casting a vote from a scrolled position leaves `window.scrollY` within a couple of
+- [x] AC2 — Casting a vote from a scrolled position leaves `window.scrollY` within a couple of
   pixels — the page does not jump to the top.
-- [ ] AC3 — After casting, the vote's `<select>` is still the focused element (keyboard users keep
+- [x] AC3 — After casting, the vote's `<select>` is still the focused element (keyboard users keep
   their place).
-- [ ] AC4 — `npm test` + `npm run test:e2e` green; live smoke green; ticket moved to
-  `tickets/done/`.
+- [x] AC4 — `npm test` green (115/115), `npm run test:e2e` green (26 passed, 3 live gated),
+  `LIVE=1 npm run test:e2e:live` green (3/3) on the origin; ticket moved to `tickets/done/`.
 
 ## 2. Files
 
