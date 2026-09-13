@@ -315,6 +315,15 @@ minimum, not the target.
    accepted, not a defect to fix later.
 
 **Resolved (2026-09-13):**
+- **[N2] `/api/rooms` and passcode-protected rooms — §1.5's prose clarified.** §1.5's parenthetical
+  ("public rooms (never passcode-protected ones)") conflicts with §1.4's own example, which shows
+  `hasPasscode: true` *inside* the `rooms` list. Resolved in favour of the example plus `001a` AC9
+  ("never a passcode; `hasPasscode` is a boolean") and `001b` AC7 ("`list()` returns only
+  `public !== false` rooms"): **the `public` flag governs discoverability; `hasPasscode` is an
+  advisory boolean telling the client to prompt.** A `public: true` room with a passcode is listed
+  but gated (`bad_passcode` on `hello` with a wrong or missing passcode); a `public: false` room is
+  not listed at all. Neither the list nor the room metadata ever carries the passcode or its hash.
+  Verified live against `https://poker.imre.dev`. **§1.5's wording is superseded by this note.**
 - **[B1] `311ecode/poker` exists and `main` is pushed.** Created via the API (private, no
   auto-init), `origin` = `git@github.com:311ecode/poker.git`, `main` tracks `origin/main`, and the
   verbatim `LICENSE` was verified byte-identical on the remote. `001a` AC1 is **no longer blocked**;
