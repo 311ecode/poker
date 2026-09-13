@@ -33,7 +33,11 @@ there belongs to the **menu** repo, even when it is about poker (POKER-001f).
   index, no event log. `data/` is gitignored; `DATA_DIR` overrides it (tests rely on this).
 - **Tests:** `node --test` (unit) + **Playwright** (e2e). Browsers live in `./.pw-browsers`
   (gitignored) — the default `~/.cache` is not usable here.
-- **License:** LGPL (exact version + holder pending — POKER-001 §5).
+- **License:** **SSPL-1.0** (Server Side Public License v1) — © Imre Toth. Deliberately *not*
+  OSI-approved: internal use and self-hosting are unrestricted, but offering the functionality to
+  third parties **as a service** obliges you to release the whole stack (LICENSE §13). See
+  [`RESTRICTIONS.md`](RESTRICTIONS.md). `LICENSE` is verbatim and **must not be edited**; the
+  copyright notice lives in `COPYRIGHT`.
 
 ## The one rule that must never break
 

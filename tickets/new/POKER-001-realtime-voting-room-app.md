@@ -29,7 +29,7 @@ playwright magic from zero … database is multiple json file per room one json 
 | 6 | Realtime = **WebSocket**, one PM2 process (`instances: 1`) | Realtime push is the feature; in-memory state means one instance. |
 | 7 | e2e = **Playwright from zero**, multi-context, spawned server on a random free port | "functionally test it easily … playwright magic from zero". |
 | 8 | **Node 26.8.1** (nvm) — the fleet's canonical toolchain node (`catalog.json` → `toolchain.node`), present on the z640 and on g2 | Node ≥ 24 type-stripping lets `node server.ts` run with **no build step**. |
-| 9 | **LGPL** for this repo | User decision. Exact version + copyright holder is an **open item** (§5). |
+| 9 | **SSPL-1.0** (Server Side Public License v1) — © Imre Toth | User decision, explicitly aggressive: third parties may **use it internally** and self-host freely, but **offering it as a service** obliges them to release the whole stack (LICENSE §13). Accepted cost: **not OSI-approved**; some orgs/distros refuse SSPL as policy. |
 
 **Out of scope:** real poker rules/gameplay, accounts, chat, a real DB, multi-host scaling,
 Cloudflare Access. The `poker` name is the *theme*; the feature is the voting room.
@@ -255,7 +255,8 @@ the moment `a` lands a protocol stub. `001f` is gated on `d` being live.
       fallback (**001e**).
 - [ ] `npm test` green; `npm run test:e2e` green with **two browser contexts** (**001c**).
 - [ ] Fleet dashboard shows the `poker` group; `menu` guard + dashboard unit suites green (**001f**).
-- [ ] LICENSE present (**001a**, text supplied by the user).
+- [ ] LICENSE present and **verbatim** (**001a**); `COPYRIGHT` holds the © line; `RESTRICTIONS.md`
+      is the plain-English summary; `package.json` declares `"license": "SSPL-1.0"`.
 
 ## 4. Tests
 
@@ -276,10 +277,12 @@ for the anonymity rules, not only what is painted.
    the moment the user creates the empty repo, `git push -u origin main` works. No sub-ticket can
    land (and 001a AC1 cannot be ticked) until then.
 
-**Non-blocking — answer when convenient:**
-2. **[N1] LGPL text** — the user will share it. Version (LGPL-2.1 vs **LGPL-3.0**) and copyright holder
-   name. Until then `LICENSE` is a placeholder; **do not invent a holder**.
-3. **[N2] `instances: 1` is mandatory** (in-memory room state). Accept the single-process ceiling now.
+**Non-blocking:**
+2. **[N1] `instances: 1` is mandatory** (in-memory room state). Accept the single-process ceiling now.
+
+**Resolved (2026-09-13):** the license question. **SSPL-1.0**, © Imre Toth — `LICENSE` (verbatim,
+fetched from the canonical text), `COPYRIGHT`, `RESTRICTIONS.md` and the SPDX field are landed in
+this repo. The earlier "LGPL" placeholder is dead; do not resurrect it.
 
 ## Done checklist
 

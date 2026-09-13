@@ -27,7 +27,7 @@ Public: **https://poker.imre.dev** (via a Cloudflare tunnel on `hp-zbook-17-g2`)
 | Anonymity | While a vote is open: counts only, never names. Voter order is per-viewer, stable, **self last** |
 | Tests | `node --test` unit + **Playwright from zero**, two browser contexts, spawned server on a random free port |
 | Deploy | PM2 (project-local `PM2_HOME`) kept alive by an app-owned systemd **user** unit; `cloudflared` as its own user unit |
-| License | **LGPL** (exact version + holder pending — see POKER-001 §5) |
+| License | **SSPL-1.0** — internal use and self-hosting free; offering it to third parties as a service requires releasing the whole stack ([plain English](RESTRICTIONS.md)) |
 
 ## Work plan
 

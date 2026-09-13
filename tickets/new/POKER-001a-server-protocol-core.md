@@ -22,7 +22,9 @@ type-stripping (`node server.ts`), exactly like offtube.
 - [ ] **AC1** **BLOCKED until the user creates `311ecode/poker` on GitHub** (parent §5 item [B1]). Then:
       repo exists, with `package.json`
       (`type: module`, `engines.node >= 26.8.1`), `.gitignore` (`data/`, `.pm2/`, `.pw-browsers/`,
-      `.cloudflared/`, `.env`), and a LICENSE placeholder (LGPL — **text from the user**, see parent §5).
+      `.cloudflared/`, `.env`), the **`SSPL-1.0`** license set — `LICENSE` (verbatim, **already
+      landed** — do not edit), `COPYRIGHT`, `RESTRICTIONS.md` — and `"license": "SSPL-1.0"` in
+      `package.json`.
 - [ ] **AC2** `node server.ts` serves `public/` and answers `GET /api/health` →
       `{ok:true,version,rooms,connections,uptime}`.
 - [ ] **AC3** A single `http.Server` handles the WS upgrade on the **same port** (no second port);
