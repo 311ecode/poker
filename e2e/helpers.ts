@@ -70,6 +70,28 @@ export function framesSince(frames: FrameLog[], index: number): string[] {
   return frames.slice(index).map((frame) => frame.payload);
 }
 
+/**
+ * Record every frame the page SENDS. POKER-003 uses this to prove the browser
+ * does not re-claim a name the server already knows (and claims silently only
+ * when it must). Attach before `goto` so the hello is captured too.
+ */
+export function recordSentFrames(page: Page): FrameLog[] {
+  const frames: FrameLog[] = [];
+  page.on("websocket", (ws) => {
+    ws.on("framesent", (event) => {
+      const payload = typeof event.payload === "string" ? event.payload : event.payload.toString("utf8");
+      let json: Record<string, any> | null = null;
+      try {
+        json = JSON.parse(payload) as Record<string, any>;
+      } catch {
+        json = null;
+      }
+      frames.push({ url: ws.url, payload, json });
+    });
+  });
+  return frames;
+}
+
 /** Count main-frame navigations, to prove a change arrived "without a reload". */
 export function countNavigations(page: Page): () => number {
   let count = 0;

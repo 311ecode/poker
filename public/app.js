@@ -60,6 +60,11 @@ const state = {
   roomCode: null,
   passcode: "",
   you: { session, name: "" },
+  // POKER-003: a claimed name is burned into localStorage for life, so the
+  // client claims it silently in a new room and never re-claims where the server
+  // already knows us. `claimRejected` re-opens the form if that name is taken.
+  autoClaimSent: false,
+  claimRejected: false,
   members: [],
   votes: new Map(), // id -> vote view (counts only while open)
   orders: new Map(), // id -> { order: [session], self }
@@ -240,6 +245,9 @@ function closeSocket() {
 function connect() {
   if (!state.roomCode) return;
   closeSocket();
+  // A fresh socket may need the silent claim again; a rejected name does not
+  // (it would just fail identically).
+  state.autoClaimSent = false;
   setConnection("connecting");
   const ws = new WebSocket(wsUrl());
   socket = ws;
@@ -290,6 +298,23 @@ function connect() {
 // protocol
 // ---------------------------------------------------------------------------
 
+/**
+ * POKER-003: use the name burned into this browser, never re-claim it.
+ * - the server already knows this session → `hello_ok.you.name` is used as-is;
+ *   the client sends NO `claim` frame at all;
+ * - a new room → claim the stored name once, silently;
+ * - nothing stored, or the stored name was rejected here → the form is the path.
+ */
+function autoClaimStoredName() {
+  if (state.route.name !== "room") return;
+  if ((state.you.name ?? "") !== "") return;
+  if (state.autoClaimSent || state.claimRejected) return;
+  const stored = readName(storage).trim();
+  if (stored === "") return;
+  state.autoClaimSent = true;
+  if (!send({ t: "claim", name: stored })) state.autoClaimSent = false;
+}
+
 function handleMessage(message) {
   if (!message || typeof message.t !== "string") return;
   switch (message.t) {
@@ -307,6 +332,9 @@ function handleMessage(message) {
       state.history = [];
       state.historyStatus = "idle";
       renderAll();
+      // POKER-003: if the server does not know this session yet but a name is
+      // burned into this browser, claim it silently — the form never appears.
+      autoClaimStoredName();
       return;
     }
     case "presence": {
@@ -316,6 +344,7 @@ function handleMessage(message) {
     }
     case "claim_ok": {
       state.you = { session: message.you?.session ?? state.you.session, name: message.you?.name ?? "" };
+      state.claimRejected = false;
       writeName(storage, state.you.name);
       clearError();
       renderYou();
@@ -384,7 +413,17 @@ function handleMessage(message) {
     case "pong":
       return;
     case "error": {
-      showError(typeof message.code === "string" ? message.code : "server_error");
+      const code = typeof message.code === "string" ? message.code : "server_error";
+      // POKER-003: a stored name that this room refuses (taken / locked) must
+      // re-open the form so the visitor can pick a different one.
+      if (
+        state.route.name === "room" &&
+        (state.you.name ?? "") === "" &&
+        ["name_taken", "name_locked", "bad_name", "name_too_long"].includes(code)
+      ) {
+        state.claimRejected = true;
+      }
+      showError(code);
       return;
     }
     default:
@@ -441,6 +480,10 @@ function applyRoute() {
     if (changed) {
       state.votes = new Map();
       state.orders = new Map();
+      // POKER-003: a new room gets a fresh silent-claim attempt; a name refused
+      // in a PREVIOUS room must not keep the form hidden here.
+      state.autoClaimSent = false;
+      state.claimRejected = false;
       // POKER-002: this browser's own ballots, restored so "my vote" survives
       // a reload and a vote reopen. Client-only mirror of the server ballot.
       state.selfChoices = new Map(readSelfChoices(storage, route.code));
@@ -505,11 +548,16 @@ function renderYou() {
 function renderChrome() {
   const inRoom = state.route.name === "room";
   const named = (state.you.name ?? "") !== "";
-  if (els.claimForm) els.claimForm.hidden = !inRoom || named;
+  const storedName = readName(storage).trim();
+  // POKER-003: a name burned into localStorage is used automatically on entry,
+  // so the form is never the path — unless that stored name was rejected in
+  // this room (taken), when the visitor must pick another.
+  const claimable = !named && (storedName === "" || state.claimRejected);
+  if (els.claimForm) els.claimForm.hidden = !inRoom || !claimable;
   if (els.youLine) els.youLine.hidden = !inRoom || !named;
   if (els.retryForm) els.retryForm.hidden = !inRoom || state.error !== "bad_passcode";
   if (els.openVoteForm) els.openVoteForm.hidden = !inRoom || !named;
-  if (els.needName) els.needName.hidden = !inRoom || named;
+  if (els.needName) els.needName.hidden = !inRoom || named || !claimable;
 }
 
 function renderMembers() {

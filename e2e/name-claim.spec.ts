@@ -6,8 +6,11 @@ import {
   claimName,
   connectRoom,
   createRoomViaApi,
+  enterRoom,
   expectConnection,
   expectError,
+  readRoomFile,
+  recordSentFrames,
   uniqueTitle,
 } from "./helpers.js";
 
@@ -57,5 +60,56 @@ test("AC3: claim a name; a duplicate held by context A is rejected in context B 
   } finally {
     await contextA.close();
     await contextB.close();
+  }
+});
+
+test("POKER-003: a claimed name is burned into the browser and used, never re-claimed", async ({ browser, request }) => {
+  const roomA = await createRoomViaApi(request, { title: uniqueTitle("name-life-a") });
+  const roomB = await createRoomViaApi(request, { title: uniqueTitle("name-life-b") });
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    const sent = recordSentFrames(page);
+
+    // First ever visit: nothing stored, so the form is the path.
+    await enterRoom(page, roomA.code);
+    await expectConnection(page, "open");
+    await expect(page.locator('[data-form="claim"]')).toBeVisible();
+    await claimName(page, "Lifetime");
+    await expect(page.locator("[data-you-name]")).toHaveText("Lifetime");
+    expect(await page.evaluate(() => localStorage.getItem("poker.name"))).toBe("Lifetime");
+
+    // Reload the SAME room: the server already knows us, so no claim is sent.
+    const beforeReloadA = sent.length;
+    await page.reload();
+    await expectConnection(page, "open");
+    await expect(page.locator("[data-you-name]")).toHaveText("Lifetime");
+    await expect(page.locator('[data-form="claim"]')).toBeHidden();
+    expect(sent.slice(beforeReloadA).filter((frame) => frame.json?.t === "claim")).toEqual([]);
+
+    // A DIFFERENT room: the stored name is claimed silently — form never shown,
+    // exactly one claim frame, carrying the stored name.
+    const beforeB = sent.length;
+    await enterRoom(page, roomB.code);
+    await expectConnection(page, "open");
+    await expect(page.locator("[data-you-name]")).toHaveText("Lifetime");
+    await expect(page.locator('[data-form="claim"]')).toBeHidden();
+    const claimsInB = sent.slice(beforeB).filter((frame) => frame.json?.t === "claim");
+    expect(claimsInB.map((frame) => frame.json?.name)).toEqual(["Lifetime"]);
+
+    // …and the server really has it for this browser's session.
+    const file = await readRoomFile(roomB.code);
+    const session = await page.evaluate(() => localStorage.getItem("poker.session"));
+    expect(file.members.find((member: { session: string }) => member.session === session)?.name).toBe(
+      "Lifetime",
+    );
+
+    // Reloading B again still sends no claim.
+    const beforeReloadB = sent.length;
+    await page.reload();
+    await expect(page.locator("[data-you-name]")).toHaveText("Lifetime");
+    expect(sent.slice(beforeReloadB).filter((frame) => frame.json?.t === "claim")).toEqual([]);
+  } finally {
+    await context.close();
   }
 });

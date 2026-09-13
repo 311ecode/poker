@@ -94,4 +94,36 @@ test.describe("live smoke against the deployed origin", () => {
       await anon.close();
     }
   });
+
+  // POKER-003 verified on the DEPLOYED origin: a claimed name is burned into the
+  // browser and reused in the next room without the form ever appearing.
+  test("POKER-003 live: the claimed name is reused in another room", async ({ browser, request }) => {
+    const newRoom = async (prefix: string): Promise<string> => {
+      const created = await request.post(`${ORIGIN}/api/rooms`, {
+        data: { title: uniqueTitle(prefix), public: true },
+      });
+      expect(created.status(), "POST /api/rooms").toBe(200);
+      return ((await created.json()) as { room: { code: string } }).room.code;
+    };
+    const roomA = await newRoom("live-name-a");
+    const roomB = await newRoom("live-name-b");
+
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      await page.goto(`${ORIGIN}/#/room/${roomA}`);
+      await expect(page.locator('[data-form="claim"]')).toBeVisible();
+      await page.locator('[data-input="name"]').fill("LiveLife");
+      await page.locator('[data-action="claim-name"]').click();
+      await expect(page.locator("[data-you-name]")).toHaveText("LiveLife");
+
+      // Room B: named automatically, the form is never the path.
+      await page.goto(`${ORIGIN}/#/room/${roomB}`);
+      await expect(page.locator("[data-connection]")).toHaveAttribute("data-connection", "open");
+      await expect(page.locator("[data-you-name]")).toHaveText("LiveLife");
+      await expect(page.locator('[data-form="claim"]')).toBeHidden();
+    } finally {
+      await context.close();
+    }
+  });
 });
