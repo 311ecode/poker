@@ -14,7 +14,7 @@
 // hand-rolled framing), so it also cross-checks the server's frame codec.
 //
 //   node scripts/smoke.mjs [--origin https://poker.imre.dev] [--ws-url URL]
-//                          [--ws-path /] [--timeout 15000] [--insecure] [-v]
+//                          [--ws-path /ws] [--timeout 15000] [--insecure] [-v]
 //
 // A room is always created with `public:false` so smoke runs never show up in
 // the public room list.
@@ -351,7 +351,9 @@ function parseCli(argv) {
   const opts = {
     origin: process.env.SMOKE_ORIGIN ?? DEFAULT_ORIGIN,
     wsUrl: process.env.SMOKE_WS_URL ?? null,
-    wsPath: process.env.SMOKE_WS_PATH ?? "/",
+    // The server owns the upgrade at /ws; every other upgrade path is a 404
+    // (server.ts). This default must match POKER-001 §1.8.
+    wsPath: process.env.SMOKE_WS_PATH ?? "/ws",
     timeout: 15000,
     insecure: false,
     verbose: false,
