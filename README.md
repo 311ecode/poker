@@ -64,6 +64,17 @@ origin is public, so the server-side caps and rate limits are the only protectio
 **`poker-cloudflared.service`**: `cloudflared.service` on g2 belongs to offtube/music.imre.dev and
 must not be overwritten.
 
+## Reset data (admin)
+
+**`https://poker.imre.dev/resetdata`** is a confirmation page — a `GET` changes nothing. It offers
+**delete test rooms** (rooms created with the `test` flag, plus legacy `live-…` live-smoke rooms)
+and **delete all rooms**; the `POST` requires `confirm=RESET`.
+
+These endpoints are destructive and unauthenticated by default, matching the app's no-auth stance.
+Set **`POKER_ADMIN_TOKEN`** in the environment to require a token for `POST /resetdata` and
+`DELETE /api/rooms/:code`. The gated live suite marks every room it creates as test data and deletes
+it afterwards — it **never** calls `/resetdata` against the deployed origin.
+
 ## Work plan
 
 `POKER-001` is the parent (frozen contract + coordination). Six sub-tickets run in parallel,

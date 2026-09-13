@@ -39,6 +39,12 @@ never remove the rewrite.
 casting a vote never moves the page or steals focus. Opening a vote clears the question box, and
 **only for the opener** (POKER-012) — never react to a `vote_new` broadcast by clearing input.
 
+**Admin data reset (POKER-013):** `GET /resetdata` is a side-effect-free confirmation page;
+`POST /resetdata` needs `confirm=RESET` and `scope=all|test`; `DELETE /api/rooms/:code` needs the
+`X-Poker-Confirm: delete` header. Setting `POKER_ADMIN_TOKEN` gates both. Test rooms are created with
+`test: true` and swept by `scope=test` (plus legacy `live-…` titles); the live suite deletes its own
+rooms and must **never** call `/resetdata` on the deployed origin.
+
 It is a **sibling project**, not dashboard work: **no `DASH-…` tickets, no `menu-ctl.sh`, no
 reconcile, no per-env slice.** Work is tracked as **`POKER-…`** tickets in this repo.
 

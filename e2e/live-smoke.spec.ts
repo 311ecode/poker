@@ -145,6 +145,9 @@ test.describe("live smoke against the deployed origin", () => {
 
       const page = await context.newPage();
       await page.goto(`${ORIGIN}/#/room/${roomA}`);
+      // The claim form renders before the socket is open, and the client drops a
+      // `send` while connecting — always wait for the connection first.
+      await expect(page.locator("[data-connection]")).toHaveAttribute("data-connection", "open");
       await expect(page.locator('[data-form="claim"]')).toBeVisible();
       await page.locator('[data-input="name"]').fill("LiveLife");
       await page.locator('[data-action="claim-name"]').click();

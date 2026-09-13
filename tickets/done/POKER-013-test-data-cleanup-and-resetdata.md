@@ -4,7 +4,9 @@
 **Reporter:** user — *"We got some tests which are creating new data. At least those data should be
 somehow removed… https://poker.imre.dev/resetdata should be implemented [as a] full data reset as
 well. But don't use it from your test on the semi-live system of the imre.dev."*
-**Status:** IN PROGRESS
+**Status:** **DONE** (2026-09-13) — landed on `main` (`4198722`), pushed, live on
+**https://poker.imre.dev**. The accumulated backlog was swept: 42 test rooms deleted, the 7 real
+rooms untouched; three consecutive live runs then left the room count unchanged at 7.
 
 ## 0. Decisions
 
@@ -27,15 +29,22 @@ well. But don't use it from your test on the semi-live system of the imre.dev."*
 
 ## 1. Acceptance criteria
 
-- [ ] AC1 — `DELETE /api/rooms/:code` (header `X-Poker-Confirm: delete`) removes that room and its
+- [x] AC1 — `DELETE /api/rooms/:code` (header `X-Poker-Confirm: delete`) removes that room and its
   file; an unknown code is `404`; without the confirm header it is `403`.
-- [ ] AC2 — `GET /resetdata` has **no** side effects and reports the total and test-room counts.
-- [ ] AC3 — `POST /resetdata` without `confirm=RESET` is refused; `scope=all` removes every room;
+- [x] AC2 — `GET /resetdata` has **no** side effects and reports the total and test-room counts.
+- [x] AC3 — `POST /resetdata` without `confirm=RESET` is refused; `scope=all` removes every room;
   `scope=test` removes only flagged/legacy-test rooms and leaves real rooms alone.
-- [ ] AC4 — A room created with `test: true` round-trips the flag; the live smoke marks its rooms
+- [x] AC4 — A room created with `test: true` round-trips the flag; the live smoke marks its rooms
   and deletes them in `finally` without touching `/resetdata`.
-- [ ] AC5 — `npm test` + `npm run test:e2e` green; live smoke green; ticket moved to
-  `tickets/done/`.
+- [x] AC5 — `npm test` green (117/117), `npm run test:e2e` green (27 passed, 3 live gated),
+  `LIVE=1 npm run test:e2e:live` green (3/3 ×3 runs, room count unchanged) on the origin; ticket
+  moved to `tickets/done/`.
+
+## 3. Note (fixed while verifying)
+
+The POKER-003 live test claimed a name without waiting for the WebSocket to be open, so the click
+could race the connection (the client drops a `send` while connecting) — it flaked once. It now
+waits for `data-connection="open"`, like the other live tests.
 
 ## 2. Files
 
