@@ -4,8 +4,10 @@ data/
 # project-local PM2 daemon
 .pm2/
 
-# Playwright browsers (the default ~/.cache is not usable here)
+# Playwright browsers (the default ~/.cache is not usable here).
+# Both forms: a worktree may point ".pw-browsers" at a shared dir with a symlink.
 .pw-browsers/
+.pw-browsers
 test-results/
 playwright-report/
 
