@@ -1,0 +1,30 @@
+{
+  "name": "poker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "poker.imre.dev — a no-auth, realtime voting room app",
+  "license": "SSPL-1.0",
+  "engines": {
+    "node": ">=26.8.1"
+  },
+  "scripts": {
+    "start": "node server.ts",
+    "dev": "PM2_HOME=.pm2 pm2 start ecosystem.config.cjs && PM2_HOME=.pm2 pm2 logs poker --raw",
+    "dev:stop": "PM2_HOME=.pm2 pm2 stop poker && PM2_HOME=.pm2 pm2 delete poker",
+    "dev:restart": "PM2_HOME=.pm2 pm2 restart poker",
+    "dev:logs": "PM2_HOME=.pm2 pm2 logs poker --raw",
+    "dev:systemd:install": "cp systemd/poker.service ~/.config/systemd/user/poker.service && systemctl --user daemon-reload && systemctl --user enable --now poker",
+    "dev:systemd:uninstall": "systemctl --user disable --now poker && rm -f ~/.config/systemd/user/poker.service && systemctl --user daemon-reload",
+    "dev:cloudflare:install": "node scripts/setup-cloudflare.mjs ensure",
+    "dev:cloudflare:status": "node scripts/setup-cloudflare.mjs status",
+    "dev:cloudflare:uninstall": "systemctl --user disable --now cloudflared && rm -f ~/.config/systemd/user/cloudflared.service && systemctl --user daemon-reload",
+    "test": "node --test",
+    "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=\"$PWD/.pw-browsers\" playwright test",
+    "test:e2e:live": "LIVE=1 PLAYWRIGHT_BROWSERS_PATH=\"$PWD/.pw-browsers\" playwright test e2e/live-smoke.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "pm2": "^7.0.3"
+  }
+}
