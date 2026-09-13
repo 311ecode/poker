@@ -3,7 +3,8 @@
 **Project:** poker (this repo, `main`) · **Created:** 2026-09-13
 **Reporter:** user — *"it's right that the passcode is written in the room so people can get into
 there"* → clarified: **show the passcode inside the room so members can share it.**
-**Status:** IN PROGRESS
+**Status:** **DONE** (2026-09-13) — landed on `main` (`8329475`), pushed, live on
+**https://poker.imre.dev**.
 
 ## 0. Decision
 
@@ -20,13 +21,14 @@ Scope: display + copy, nothing more (no invite links, no QR codes).
 
 ## 1. Acceptance criteria
 
-- [ ] AC1 — `localStorage["poker.passcode.<CODE>"]` is written when an admitted member hello'd with a
+- [x] AC1 — `localStorage["poker.passcode.<CODE>"]` is written when an admitted member hello'd with a
   passcode (created room, join form, retry form, or invite query).
-- [ ] AC2 — In a protected room the client renders `Passcode: <code>` (`[data-room-passcode]`) plus a
+- [x] AC2 — In a protected room the client renders `Passcode: <code>` (`[data-room-passcode]`) plus a
   Copy button; in a room with no passcode the line is absent.
-- [ ] AC3 — The passcode still never appears in `/api/rooms`, `/api/rooms/:code`, `roomMeta` or any
+- [x] AC3 — The passcode still never appears in `/api/rooms`, `/api/rooms/:code`, `roomMeta` or any
   public frame (the existing HTTP assertions keep holding).
-- [ ] AC4 — `npm test` + `npm run test:e2e` green; live smoke green; ticket moved to `tickets/done/`.
+- [x] AC4 — `npm test` green (113/113), `npm run test:e2e` green (22 passed, 3 live gated),
+  `LIVE=1 npm run test:e2e:live` green (3/3) on the origin; ticket moved to `tickets/done/`.
 
 ## 2. Files
 
