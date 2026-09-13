@@ -98,7 +98,7 @@
       <!-- =============================== ROOM =============================== -->
       <section data-panel="room" hidden>
         <p class="room-bar">
-          <button type="button" data-action="home">Home</button>
+          <button type="button" data-action="home">Back</button>
           Room <strong data-room-code></strong> — <span data-room-title></span>
         </p>
 
@@ -116,19 +116,21 @@
           <p class="banner-compact" data-banner-compact aria-hidden="true"></p>
         </div>
 
-        <form data-form="retry-join">
+        <!-- Only needed when a passcode-protected room refused admission. -->
+        <form data-form="retry-join" hidden>
           <label>
             Passcode <input data-input="room-passcode" type="password" autocomplete="off" />
           </label>
           <button type="submit" data-action="retry-join">Join room</button>
         </form>
 
+        <!-- POKER-002 AC5: the name is step one; once claimed this form is gone. -->
         <form data-form="claim">
           <h2>Claim a name</h2>
           <label>Name <input data-input="name" autocomplete="off" maxlength="24" /></label>
           <button type="submit" data-action="claim-name">Claim name</button>
         </form>
-        <p>
+        <p data-you-line>
           You are <strong data-you-name></strong>
           (<code data-you-session></code>)
         </p>
@@ -143,15 +145,13 @@
         <form data-form="open-vote">
           <h2>Open a vote</h2>
           <label>Question <input data-input="vote-title" autocomplete="off" /></label>
-          <label>
-            Options (one per line)
-            <textarea data-input="vote-options" rows="4"></textarea>
-          </label>
+          <p class="hint">Every vote uses the fixed deck 0, 0.5, 1, 2, 3, 5, 8, 13.</p>
           <button type="submit" data-action="open-vote">Open vote</button>
         </form>
 
         <section data-section="votes">
           <h2>Votes</h2>
+          <p class="hint" data-need-name hidden>Claim a name above to open a vote or cast one.</p>
           <!--
             [data-vote] cards carry data-vote-id + data-vote-state.
             While state="open" the card MUST NOT contain a member name or a

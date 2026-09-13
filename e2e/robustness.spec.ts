@@ -46,7 +46,7 @@ test("AC10: malformed + oversize WS payload and a bad JSON body do not break the
     expect(status).toBe(400);
 
     // 4) the page still does real work after the abuse.
-    const voteId = await openVote(page, "Still alive", ["Yes", "No"]);
+    const voteId = await openVote(page, "Still alive");
     await expect(voteCard(page, voteId)).toHaveAttribute("data-vote-state", "open");
 
     // 5) a dropped socket reconnects, re-hellos the same room and keeps the name.

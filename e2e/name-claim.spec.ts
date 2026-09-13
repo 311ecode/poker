@@ -22,6 +22,12 @@ test("AC3: claim a name; a duplicate held by context A is rejected in context B 
     // B is in the room but unnamed until it claims.
     await expect(b.page.locator("[data-you-name]")).toHaveText("");
     await expect(b.page.locator("[data-you-session]")).not.toHaveText("");
+    // POKER-002 AC5: while unnamed the claim form is the gate.
+    await expect(b.page.locator('[data-form="claim"]')).toBeVisible();
+
+    // An empty claim is a clean error, not a crash.
+    await claimName(b.page, "");
+    await expectError(b.page, "bad_name");
 
     // A holds "Alice"; B tries the same name in different case.
     for (const attempt of ["Alice", "alice", "ALICE"]) {
@@ -38,15 +44,15 @@ test("AC3: claim a name; a duplicate held by context A is rejected in context B 
     await expect(b.page.locator("[data-you-name]")).toHaveText("Bob");
     await expect(a.page.locator('[data-member][data-member-name="Bob"]')).toHaveCount(1);
 
-    // An empty claim is a clean error, not a crash.
-    await b.page.locator('[data-input="name"]').fill("");
-    await b.page.locator('[data-action="claim-name"]').click();
-    await expectError(b.page, "bad_name");
+    // POKER-002 AC3/AC5: the name is permanent — the claim form is gone, so the
+    // UI offers no way to change it (the server refuses too; see unit tests).
+    await expect(b.page.locator('[data-form="claim"]')).toBeHidden();
 
     // The claimed name is server-authoritative: it survives a reload.
     await b.page.reload();
     await expectConnection(b.page, "open");
     await expect(b.page.locator("[data-you-name]")).toHaveText("Bob");
+    await expect(b.page.locator('[data-form="claim"]')).toBeHidden();
     await expect(b.page.locator("[data-error]")).toHaveAttribute("data-error", "");
   } finally {
     await contextA.close();

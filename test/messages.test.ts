@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ERROR_MESSAGES, messageFor } from "../public/messages.js";
 
-/** Every code documented in the POKER-001c server interface note. */
+/** Every code documented in the POKER-001c server interface note (POKER-002 adds two). */
 const DOCUMENTED_CODES = [
   "bad_message",
   "bad_room",
@@ -15,10 +15,10 @@ const DOCUMENTED_CODES = [
   "not_in_room",
   "name_taken",
   "name_too_long",
+  "name_locked",
+  "name_required",
   "bad_name",
   "bad_title",
-  "bad_options",
-  "too_many_options",
   "too_many_votes",
   "room_full",
   "bad_vote",

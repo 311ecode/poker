@@ -1,0 +1,98 @@
+// e2e/vote-identity.spec.ts — POKER-002 on the real browser:
+//   AC1 the deck is the fixed, server-owned planning-poker scale;
+//   AC4 my own vote is visible, changeable, and survives a reopen + reload;
+//   AC5 an unnamed visitor cannot vote (the name is the gate).
+//
+// Two independent contexts against ONE real server, like the landed specs.
+
+import { expect, test } from "@playwright/test";
+import {
+  castVote,
+  claimName,
+  connectRoom,
+  createRoomViaApi,
+  openVote,
+  uniqueTitle,
+  voteCard,
+  yourVote,
+} from "./helpers.js";
+
+/** POKER-002 AC1: the frozen deck. */
+const DECK = ["0", "0.5", "1", "2", "3", "5", "8", "13"];
+
+test("POKER-002 AC1/AC5: the fixed deck is rendered and the name is the gate", async ({ browser, request }) => {
+  const room = await createRoomViaApi(request, { title: uniqueTitle("deck005") });
+  const contextA = await browser.newContext();
+  const contextB = await browser.newContext();
+  try {
+    const a = await connectRoom(contextA, room.code, { name: "Alice" });
+    const b = await connectRoom(contextB, room.code); // joins unnamed
+
+    // Unnamed: the claim form is the gate, the vote controls are not offered.
+    await expect(b.page.locator('[data-form="claim"]')).toBeVisible();
+    await expect(b.page.locator('[data-form="open-vote"]')).toBeHidden();
+    await expect(b.page.locator("[data-need-name]")).toBeVisible();
+
+    const voteId = await openVote(a.page, "How many points?");
+    const card = voteCard(b.page, voteId);
+    // Exactly the fixed deck, in order, each card starting at 0.
+    await expect(card.locator("[data-choice]")).toHaveText(DECK.map((option) => `${option} (0)`));
+    // No name, no ballot: every card is disabled for the unnamed viewer.
+    await expect(card.locator('[data-choice="3"]')).toBeDisabled();
+
+    // Claiming flips the gate: the deck becomes usable, the form disappears.
+    await claimName(b.page, "Bob");
+    await expect(b.page.locator('[data-form="claim"]')).toBeHidden();
+    await expect(b.page.locator('[data-form="open-vote"]')).toBeVisible();
+    await expect(b.page.locator("[data-need-name]")).toBeHidden();
+    await expect(card.locator('[data-choice="3"]')).toBeEnabled();
+
+    await castVote(b.page, voteId, "3");
+    await expect(yourVote(b.page, voteId)).toHaveText("3");
+  } finally {
+    await contextA.close();
+    await contextB.close();
+  }
+});
+
+test("POKER-002 AC4: my vote is obvious, changeable, and survives a reopen + reload", async ({ browser, request }) => {
+  const room = await createRoomViaApi(request, { title: uniqueTitle("ownvote") });
+  const context = await browser.newContext();
+  try {
+    const { page } = await connectRoom(context, room.code, { name: "Alice" });
+    const voteId = await openVote(page, "Estimate it");
+    const card = voteCard(page, voteId);
+
+    // Before casting, the card says so and nothing is marked.
+    await expect(card.locator("[data-your-vote]")).toContainText("not cast yet");
+    await expect(card.locator('[data-self-choice="true"]')).toHaveCount(0);
+
+    // Cast → the choice is stated in words AND the card is marked.
+    await castVote(page, voteId, "3");
+    await expect(yourVote(page, voteId)).toHaveText("3");
+    await expect(card.locator('[data-choice="3"]')).toHaveAttribute("data-self-choice", "true");
+    await expect(card.locator('[data-choice="3"]')).toHaveAttribute("aria-pressed", "true");
+
+    // Round 2 is the SAME world: close → reopen keeps my ballot …
+    await card.locator('[data-action="close-vote"]').click();
+    await expect(card).toHaveAttribute("data-vote-state", "closed");
+    await card.locator('[data-action="reopen-vote"]').click();
+    await expect(card).toHaveAttribute("data-vote-state", "open");
+    await expect(yourVote(page, voteId)).toHaveText("3");
+
+    // … and I can simply change my own choice.
+    await castVote(page, voteId, "8");
+    await expect(yourVote(page, voteId)).toHaveText("8");
+    await expect(card.locator('[data-choice="8"]')).toHaveAttribute("data-self-choice", "true");
+    await expect(card.locator('[data-choice="3"]')).not.toHaveAttribute("data-self-choice", "true");
+    await expect(card.locator('[data-choice="3"]')).toHaveAttribute("data-count", "0");
+    await expect(card.locator('[data-choice="8"]')).toHaveAttribute("data-count", "1");
+
+    // The client-side mirror survives a full reload.
+    await page.reload();
+    await expect(voteCard(page, voteId)).toHaveAttribute("data-vote-state", "open");
+    await expect(yourVote(page, voteId)).toHaveText("8");
+  } finally {
+    await context.close();
+  }
+});

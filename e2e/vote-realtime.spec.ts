@@ -26,7 +26,7 @@ test("AC6: a vote opened in context A is pushed to context B without a reload", 
 
     const navigationsBefore = b.navigations();
     const mark = b.frames.length;
-    const voteId = await openVote(a.page, "Who pays?", ["Heads", "Tails"]);
+    const voteId = await openVote(a.page, "Who pays?");
 
     // (a) the DOM in B changes with no navigation/reload…
     await expect(voteCard(b.page, voteId)).toHaveAttribute("data-vote-state", "open");
@@ -37,7 +37,18 @@ test("AC6: a vote opened in context A is pushed to context B without a reload", 
     const voteNew = openFrames.map((payload) => JSON.parse(payload)).filter((message) => message.t === "vote_new");
     expect(voteNew.length).toBeGreaterThan(0);
     expect(voteNew[0].vote.id).toBe(voteId);
-    expect(voteNew[0].vote.counts).toEqual({ Heads: 0, Tails: 0 });
+    // POKER-002 AC1: the fixed deck, server-owned.
+    expect(voteNew[0].vote.options).toEqual(["0", "0.5", "1", "2", "3", "5", "8", "13"]);
+    expect(voteNew[0].vote.counts).toEqual({
+      "0": 0,
+      "0.5": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "5": 0,
+      "8": 0,
+      "13": 0,
+    });
     expect(voteNew[0].vote.votedCount).toBe(0);
     expect(voteNew[0].vote.reveal).toBeUndefined();
   } finally {
@@ -54,7 +65,7 @@ test("AC8: voter order is per-viewer, stable across a reload and self is last (R
     const a = await connectRoom(contextA, room.code, { name: "Alice" });
     const b = await connectRoom(contextB, room.code, { name: "Bob" });
 
-    const voteId = await openVote(a.page, "Ordering?", ["Yes", "No"]);
+    const voteId = await openVote(a.page, "Ordering?");
     await expect(voteCard(b.page, voteId)).toHaveAttribute("data-vote-state", "open");
 
     const orderA = await voterOrder(a.page, voteId);
@@ -100,9 +111,9 @@ test("AC9: close reveals names+choices, reopen re-hides and resumes, history kee
     const a = await connectRoom(contextA, room.code, { name: "Alice" });
     const b = await connectRoom(contextB, room.code, { name: "Bob" });
 
-    const voteId = await openVote(a.page, "Reveal me", ["Heads", "Tails"]);
-    await castVote(a.page, voteId, "Heads");
-    await castVote(b.page, voteId, "Tails");
+    const voteId = await openVote(a.page, "Reveal me");
+    await castVote(a.page, voteId, "3");
+    await castVote(b.page, voteId, "5");
     await expect(voteCard(b.page, voteId).locator("[data-voted-count]")).toHaveText("2");
     // While open there is no reveal anywhere.
     await expect(voteCard(b.page, voteId).locator("[data-reveal]")).toHaveCount(0);
@@ -111,18 +122,18 @@ test("AC9: close reveals names+choices, reopen re-hides and resumes, history kee
     await voteCard(a.page, voteId).locator('[data-action="close-vote"]').click();
     await expect(voteCard(b.page, voteId)).toHaveAttribute("data-vote-state", "closed");
     await expect(
-      voteCard(b.page, voteId).locator('[data-reveal-entry][data-reveal-name="Alice"][data-reveal-choice="Heads"]'),
+      voteCard(b.page, voteId).locator('[data-reveal-entry][data-reveal-name="Alice"][data-reveal-choice="3"]'),
     ).toHaveCount(1);
     await expect(
-      voteCard(b.page, voteId).locator('[data-reveal-entry][data-reveal-name="Bob"][data-reveal-choice="Tails"]'),
+      voteCard(b.page, voteId).locator('[data-reveal-entry][data-reveal-name="Bob"][data-reveal-choice="5"]'),
     ).toHaveCount(1);
 
     // Reopen (from B) → names hidden again, same vote, voting resumes.
     await voteCard(b.page, voteId).locator('[data-action="reopen-vote"]').click();
     await expect(voteCard(a.page, voteId)).toHaveAttribute("data-vote-state", "open");
     await expect(voteCard(a.page, voteId).locator("[data-reveal]")).toHaveCount(0);
-    await castVote(a.page, voteId, "Tails");
-    await expect(voteCard(b.page, voteId).locator('[data-choice="Tails"]')).toHaveAttribute("data-count", "2");
+    await castVote(a.page, voteId, "5");
+    await expect(voteCard(b.page, voteId).locator('[data-choice="5"]')).toHaveAttribute("data-count", "2");
     await expect(voteCard(b.page, voteId).locator("[data-voted-count]")).toHaveText("2");
 
     // History: one vote, all three transitions, in order.

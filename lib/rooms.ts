@@ -265,10 +265,10 @@ export class Hub {
     return outcome;
   }
 
-  /** AC6: open a vote (any member). */
+  /** AC6: open a vote (any named member); the deck is server-owned (POKER-002). */
   async openVote(
     peer: Peer,
-    input: { title: unknown; options: unknown },
+    input: { title: unknown },
   ): Promise<HubResult<{ voteId: string }>> {
     const code = peer.room;
     if (!code || !peer.session) return { ok: false, code: "not_in_room" };
@@ -279,7 +279,6 @@ export class Hub {
     await this.db.mutate(code, (draft) => {
       outcome = applyOpenVote(draft, {
         title: input.title,
-        options: input.options,
         by: session,
         now,
       });

@@ -2,7 +2,9 @@
 
 A small, **no-authentication**, realtime **voting room** app for a poker night. Create a room,
 claim a name, start a vote, watch the tally update live. While a vote is open nobody can see who
-voted what — only how many have voted. Closing reveals; anyone can close **and reopen**.
+voted what — only how many have voted. Closing reveals; anyone can close **and reopen**. Every vote
+uses the fixed planning-poker deck **`0, 0.5, 1, 2, 3, 5, 8, 13`**; a name is required before you can
+vote or open one, and once claimed it is locked for that room (POKER-002).
 
 Public: **https://poker.imre.dev** (via a Cloudflare tunnel on `hp-zbook-17-g2`).
 
@@ -24,6 +26,8 @@ Public: **https://poker.imre.dev** (via a Cloudflare tunnel on `hp-zbook-17-g2`)
 |---|---|
 | Runtime | **Node 26.8.1** (nvm), no bundler, no build step — `node server.ts` via Node type-stripping |
 | Realtime | **WebSocket** on the same port as HTTP; one PM2 process (`instances: 1`) |
+| Deck | **Fixed planning-poker scale** — `0, 0.5, 1, 2, 3, 5, 8, 13`, server-owned (POKER-002) |
+| Identity | A **claimed name is mandatory** to vote and **permanent** per room; no accounts (POKER-002) |
 | Database | **One JSON file per room** — `data/rooms/<CODE>.json`. No DB, no index, no event log |
 | Anonymity | While a vote is open: counts only, never names. Voter order is per-viewer, stable, **self last** |
 | Tests | `node --test` unit + **Playwright from zero**, two browser contexts, spawned server on a random free port |
@@ -73,6 +77,9 @@ disjoint by owned file:
 | [POKER-001d](tickets/done/POKER-001d-deploy-g2-pm2-tunnel.md) | deploy on g2 (PM2 + tunnel) |
 | [POKER-001e](tickets/done/POKER-001e-ascii-ui.md) | Matrix ASCII UI |
 | [POKER-001f](tickets/done/POKER-001f-fleet-descriptor-catalog.md) | fleet descriptor/catalog (menu) |
+
+**Follow-up:** [POKER-002](tickets/done/POKER-002-fixed-deck-mandatory-name-own-vote.md) — the fixed
+deck, the mandatory permanent name and the visible/changeable own vote.
 
 ## Working on this repo
 

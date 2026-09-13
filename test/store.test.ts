@@ -7,18 +7,22 @@ import assert from "node:assert/strict";
 import {
   ensureSession,
   forgetRoom,
+  forgetSelfChoices,
   memoryStorage,
   MY_ROOMS_LIMIT,
   normalizeCode,
   readLastRoom,
   readMyRooms,
   readName,
+  readSelfChoices,
   readSession,
   rememberRoom,
+  SELF_CHOICES_PREFIX,
   STORAGE_KEYS,
   writeLastRoom,
   writeMyRooms,
   writeName,
+  writeSelfChoices,
 } from "../public/store.js";
 
 const uuid = (n: number) => `0000000${n}-1111-4111-8111-11111111111${n}`;
@@ -171,4 +175,37 @@ test("every store helper rejects a non-Storage argument loudly", () => {
   assert.throws(() => readMyRooms(null), TypeError);
   assert.throws(() => rememberRoom({}, "AAAAAA"), TypeError);
   assert.throws(() => ensureSession(undefined, { randomUUID: () => uuid(1) }), TypeError);
+});
+
+// POKER-002: the viewer's OWN ballots, remembered per room. Client-only by
+// contract — this is a convenience mirror, never sent anywhere.
+
+test("self choices round-trip per room and never leak across rooms", () => {
+  const storage = memoryStorage();
+  writeSelfChoices(storage, "AAAAAA", [["v1", "3"], ["v2", "0.5"]]);
+  writeSelfChoices(storage, "BBBBBB", [["v1", "13"]]);
+
+  assert.deepEqual(readSelfChoices(storage, "AAAAAA"), [["v1", "3"], ["v2", "0.5"]]);
+  assert.deepEqual(readSelfChoices(storage, "BBBBBB"), [["v1", "13"]]);
+  assert.deepEqual(readSelfChoices(storage, "CCCCCC"), []);
+  // Stored under the documented prefix, one key per room.
+  assert.ok(storage.getItem(`${SELF_CHOICES_PREFIX}AAAAAA`));
+});
+
+test("self choices drop corrupt entries, honour the cap, and clear when empty", () => {
+  const storage = memoryStorage();
+  assert.deepEqual(readSelfChoices(storage, "AAAAAA"), []);
+  // A non-array, an odd entry and a blank choice are all ignored.
+  storage.setItem(`${SELF_CHOICES_PREFIX}AAAAAA`, JSON.stringify([["v1", "3"], "junk", ["v2", ""], ["", "5"]]));
+  assert.deepEqual(readSelfChoices(storage, "AAAAAA"), [["v1", "3"]]);
+
+  const many = Array.from({ length: MY_ROOMS_LIMIT + 5 }, (_, index) => [`v${index}`, "1"]);
+  const written = writeSelfChoices(storage, "AAAAAA", many);
+  assert.equal(written.length, MY_ROOMS_LIMIT);
+
+  assert.deepEqual(writeSelfChoices(storage, "AAAAAA", []), []);
+  assert.equal(storage.getItem(`${SELF_CHOICES_PREFIX}AAAAAA`), null);
+
+  forgetSelfChoices(storage, "AAAAAA");
+  assert.deepEqual(readSelfChoices(storage, "AAAAAA"), []);
 });

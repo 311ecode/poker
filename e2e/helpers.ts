@@ -153,9 +153,12 @@ export async function goHome(page: Page): Promise<void> {
 // votes
 // ---------------------------------------------------------------------------
 
-export async function openVote(page: Page, title: string, options: string[]): Promise<string> {
+/**
+ * Open a vote. POKER-002: the deck is server-owned, so only the question is
+ * filled — every vote is the fixed deck 0, 0.5, 1, 2, 3, 5, 8, 13.
+ */
+export async function openVote(page: Page, title: string): Promise<string> {
   await page.locator('[data-input="vote-title"]').fill(title);
-  await page.locator('[data-input="vote-options"]').fill(options.join("\n"));
   await page.locator('[data-action="open-vote"]').click();
   const card = page.locator("[data-vote]").last();
   await expect(card).toHaveAttribute("data-vote-state", "open");
@@ -170,6 +173,11 @@ export function voteCard(page: Page, voteId: string) {
 
 export async function castVote(page: Page, voteId: string, choice: string): Promise<void> {
   await page.locator(`[data-vote-id="${voteId}"] [data-choice="${choice}"]`).click();
+}
+
+/** POKER-002 AC4: the visible "Your vote" choice on a card. */
+export function yourVote(page: Page, voteId: string) {
+  return voteCard(page, voteId).locator("[data-your-choice]");
 }
 
 export async function voterOrder(page: Page, voteId: string): Promise<string[]> {

@@ -25,14 +25,14 @@ test("AC7: while a vote is open context B receives counts only — no name/revea
     const a = await connectRoom(contextA, room.code, { name: "Alice" });
     const b = await connectRoom(contextB, room.code, { name: "Bob" });
 
-    const voteId = await openVote(a.page, "Who pays the tab?", ["Heads", "Tails"]);
+    const voteId = await openVote(a.page, "Who pays the tab?");
     await expect(voteCard(b.page, voteId)).toHaveAttribute("data-vote-state", "open");
 
     // Record ONLY what context B receives while the vote is open: B changes its
     // ballot, then A casts.
     const mark = b.frames.length;
-    await castVote(b.page, voteId, "Tails");
-    await castVote(a.page, voteId, "Heads");
+    await castVote(b.page, voteId, "5");
+    await castVote(a.page, voteId, "3");
     await expect(voteCard(b.page, voteId).locator("[data-voted-count]")).toHaveText("2");
 
     const openFrames = framesSince(b.frames, mark);
@@ -80,8 +80,8 @@ test("AC7: while a vote is open context B receives counts only — no name/revea
     expect(closedFrames.length).toBeGreaterThan(0);
     expect(closedFrames[closedFrames.length - 1]!.vote.reveal).toEqual(
       expect.arrayContaining([
-        { name: "Alice", choice: "Heads" },
-        { name: "Bob", choice: "Tails" },
+        { name: "Alice", choice: "3" },
+        { name: "Bob", choice: "5" },
       ]),
     );
   } finally {

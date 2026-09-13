@@ -22,10 +22,12 @@ import {
   memoryStorage,
   readMyRooms,
   readName,
+  readSelfChoices,
   readSession,
   rememberRoom,
   writeLastRoom,
   writeName,
+  writeSelfChoices,
 } from "./store.js";
 
 // ---------------------------------------------------------------------------
@@ -105,6 +107,11 @@ const els = {
   roomBanner: $("[data-room-banner]"),
   youName: $("[data-you-name]"),
   youSession: $("[data-you-session]"),
+  youLine: $("[data-you-line]"),
+  claimForm: $('[data-form="claim"]'),
+  retryForm: $('[data-form="retry-join"]'),
+  openVoteForm: $('[data-form="open-vote"]'),
+  needName: $("[data-need-name]"),
   members: $("[data-members]"),
   votes: $("[data-votes]"),
   myRooms: $("[data-my-rooms]"),
@@ -122,7 +129,6 @@ const els = {
   createPublic: $('[data-input="create-public"]'),
   nameInput: $('[data-input="name"]'),
   voteTitle: $('[data-input="vote-title"]'),
-  voteOptions: $('[data-input="vote-options"]'),
   roomPasscode: $('[data-input="room-passcode"]'),
 };
 
@@ -313,6 +319,9 @@ function handleMessage(message) {
       writeName(storage, state.you.name);
       clearError();
       renderYou();
+      // POKER-002 AC5: claiming flips the gate, so the vote cards (disabled for
+      // an unnamed viewer) must be re-rendered immediately.
+      renderVotes();
       return;
     }
     case "vote_new":
@@ -388,6 +397,7 @@ function showError(code) {
   els.error.setAttribute("data-error", code);
   els.error.textContent = messageFor(code);
   els.error.hidden = false;
+  renderChrome();
   if (state.historyStatus === "loading") {
     state.historyStatus = "error";
     renderHistory();
@@ -398,6 +408,7 @@ function clearError() {
   state.error = null;
   els.error.setAttribute("data-error", "");
   els.error.textContent = "";
+  renderChrome();
   els.error.hidden = true;
 }
 
@@ -430,7 +441,9 @@ function applyRoute() {
     if (changed) {
       state.votes = new Map();
       state.orders = new Map();
-      state.selfChoices = new Map();
+      // POKER-002: this browser's own ballots, restored so "my vote" survives
+      // a reload and a vote reopen. Client-only mirror of the server ballot.
+      state.selfChoices = new Map(readSelfChoices(storage, route.code));
       state.members = [];
       state.history = [];
       state.historyStatus = "idle";
@@ -459,6 +472,7 @@ function goToRoom(code, passcode) {
 function renderAll() {
   renderRoute();
   renderYou();
+  renderChrome();
   renderMembers();
   renderVotes();
   renderMyRooms();
@@ -481,6 +495,21 @@ function renderRoute() {
 function renderYou() {
   els.youName.textContent = state.you.name ?? "";
   els.youSession.textContent = state.you.session ?? "";
+}
+
+/**
+ * POKER-002 AC5/AC6: the room stays lean. Claiming a name is step one, so the
+ * claim form disappears once a name exists and the name becomes read-only; the
+ * passcode retry form appears only when a protected room refused admission.
+ */
+function renderChrome() {
+  const inRoom = state.route.name === "room";
+  const named = (state.you.name ?? "") !== "";
+  if (els.claimForm) els.claimForm.hidden = !inRoom || named;
+  if (els.youLine) els.youLine.hidden = !inRoom || !named;
+  if (els.retryForm) els.retryForm.hidden = !inRoom || state.error !== "bad_passcode";
+  if (els.openVoteForm) els.openVoteForm.hidden = !inRoom || !named;
+  if (els.needName) els.needName.hidden = !inRoom || named;
 }
 
 function renderMembers() {
@@ -536,6 +565,21 @@ function tallyBlock(vote) {
   return tally;
 }
 
+/**
+ * POKER-002 AC4: this viewer's own choice for a vote, or null. While open it is
+ * the client-side mirror (`state.selfChoices`, per room, localStorage-backed);
+ * once closed it can also be read from the public reveal by our own name.
+ */
+function selfChoiceFor(vote) {
+  const local = state.selfChoices.get(vote.id);
+  if (typeof local === "string" && local !== "") return local;
+  if (vote.state === "closed" && state.you.name && Array.isArray(vote.reveal)) {
+    const mine = vote.reveal.find((entry) => entry?.name === state.you.name);
+    if (mine && typeof mine.choice === "string") return mine.choice;
+  }
+  return null;
+}
+
 function voteCard(vote) {
   const card = el("article", { "data-vote": "", "data-vote-id": vote.id, "data-vote-state": vote.state });
   // The vote title is a generated banner (AC4); the plain heading stays for
@@ -545,16 +589,37 @@ function voteCard(vote) {
 
   card.append(tallyBlock(vote));
 
+  const mine = selfChoiceFor(vote);
+  const named = (state.you.name ?? "") !== "";
+  const open = vote.state === "open";
+
+  // POKER-002 AC4: say it in words AND mark the card, so "what is my vote" is
+  // never a guess. While open it stays changeable (round 2 = same world).
+  const yourVote = el("p", { class: "your-vote", "data-your-vote": "" });
+  if (mine !== null) {
+    yourVote.append(document.createTextNode("Your vote: "));
+    yourVote.append(el("strong", { "data-your-choice": "" }, mine));
+  } else if (open && named) {
+    yourVote.classList.add("your-vote--none");
+    yourVote.textContent = "Your vote: not cast yet";
+  } else {
+    yourVote.hidden = true;
+  }
+  card.append(yourVote);
+
   const options = el("ul", { "data-options": "" });
   for (const option of vote.options ?? []) {
     const count = vote.counts?.[option] ?? 0;
+    const isMine = mine === option;
     const attrs = {
       type: "button",
       "data-choice": option,
       "data-count": String(count),
-      disabled: vote.state === "open" ? undefined : "disabled",
+      "aria-pressed": isMine ? "true" : "false",
+      // POKER-002 AC2/AC5: no name, no ballot — the server refuses it anyway.
+      disabled: open && named ? undefined : "disabled",
     };
-    if (state.selfChoices.get(vote.id) === option) attrs["data-self-choice"] = "true";
+    if (isMine) attrs["data-self-choice"] = "true";
     const button = el("button", attrs);
     button.append(document.createTextNode(`${option} (`));
     button.append(el("span", { "data-count-value": "" }, String(count)));
@@ -829,8 +894,20 @@ async function findRooms() {
 }
 
 function castVote(voteId, choice) {
-  if (send({ t: "vote_cast", voteId, choice })) {
+  // POKER-002 AC5: mirror the server gate locally instead of firing a doomed cast.
+  if ((state.you.name ?? "") === "") {
+    showError("name_required");
+    return;
+  }
+  const type = state.selfChoices.has(voteId) ? "vote_change" : "vote_cast";
+  if (send({ t: type, voteId, choice })) {
+    // POKER-002 AC4: remember it locally (and across reloads) so the mark and
+    // the "Your vote" line are immediate, not a wait for the echo.
     state.selfChoices.set(voteId, choice);
+    if (state.roomCode) {
+      writeSelfChoices(storage, state.roomCode, [...state.selfChoices.entries()]);
+    }
+    renderVotes();
   }
 }
 
@@ -869,11 +946,12 @@ $('[data-form="claim"]').addEventListener("submit", (event) => {
 
 $('[data-form="open-vote"]').addEventListener("submit", (event) => {
   event.preventDefault();
-  const options = els.voteOptions.value
-    .split("\n")
-    .map((option) => option.trim())
-    .filter((option) => option !== "");
-  send({ t: "vote_open", title: els.voteTitle.value.trim(), options });
+  if ((state.you.name ?? "") === "") {
+    showError("name_required");
+    return;
+  }
+  // POKER-002 AC1: the deck is server-owned; only the question is sent.
+  send({ t: "vote_open", title: els.voteTitle.value.trim() });
 });
 
 $('[data-action="load-history"]').addEventListener("click", () => {

@@ -55,8 +55,8 @@ test("hello on a protected room rejects a wrong or missing passcode (socket not 
 
     client.send({ t: "hello", room: room.code, session: "s-a", passcode: "nope" });
     await client.errorCode("bad_passcode");
-    // Not admitted: room operations are refused.
-    client.send({ t: "vote_open", title: "x", options: ["a"] });
+    // Not admitted: room operations are refused (before the name gate).
+    client.send({ t: "vote_open", title: "x" });
     await client.errorCode("not_in_room");
 
     client.send({ t: "hello", room: room.code, session: "s-a" });
@@ -105,7 +105,7 @@ test("room_join behaves like hello (including the passcode gate)", async () => {
   }
 });
 
-test("claim: first claim wins, a collision is rejected, and a colliding rename too", async () => {
+test("claim: first claim wins, a collision is rejected, and a claimed name is permanent (POKER-002)", async () => {
   const server = await startServer();
   try {
     const room = await createRoom(server, { title: "Names" });
@@ -120,14 +120,89 @@ test("claim: first claim wins, a collision is rejected, and a colliding rename t
     bob.send({ t: "claim", name: "Bob" });
     await bob.ofType("claim_ok");
 
-    // Renaming onto an existing name is rejected; renaming to a free one works.
+    // POKER-002 AC3: once claimed the name is permanent — even a FREE name is
+    // refused, and re-claiming the same name stays idempotent (reconnect).
     alice.send({ t: "claim", name: "Bob" });
-    await alice.errorCode("name_taken");
+    await alice.errorCode("name_locked");
     alice.send({ t: "claim", name: "Alicia" });
-    await alice.ofType("claim_ok");
+    await alice.errorCode("name_locked");
+    alice.send({ t: "claim", name: "Alice" });
+    const reclaim = await alice.ofType("claim_ok");
+    assert.equal(reclaim.json?.you.name, "Alice");
+
+    const stored = await server.db.get(room.code);
+    assert.deepEqual(
+      stored?.members.map((member) => member.name).sort(),
+      ["Alice", "Bob"],
+    );
 
     alice.destroy();
     bob.destroy();
+  } finally {
+    await server.stop();
+  }
+});
+
+test("POKER-002: an unnamed member cannot cast, open, close or reopen a vote", async () => {
+  const server = await startServer();
+  try {
+    const room = await createRoom(server, { title: "Gate" });
+    const named = await joinAs(server, room.code, "s-named", "Alice");
+    named.send({ t: "vote_open", title: "Gated" });
+    const opened = await named.ofType("vote_new");
+    const voteId = opened.json?.vote.id as string;
+    assert.deepEqual(opened.json?.vote.options, ["0", "0.5", "1", "2", "3", "5", "8", "13"]);
+
+    // A second session joins but never claims a name.
+    const anon = await join(server, room.code, "s-anon");
+    anon.send({ t: "vote_cast", voteId, choice: "3" });
+    await anon.errorCode("name_required");
+    anon.send({ t: "vote_change", voteId, choice: "5" });
+    await anon.errorCode("name_required");
+    anon.send({ t: "vote_close", voteId });
+    await anon.errorCode("name_required");
+    anon.send({ t: "vote_reopen", voteId });
+    await anon.errorCode("name_required");
+    anon.send({ t: "vote_open", title: "Nope" });
+    await anon.errorCode("name_required");
+
+    // The vote is untouched: no ballot, still open.
+    const stored = await server.db.get(room.code);
+    assert.equal(stored?.votes[0]?.ballots.length, 0);
+    assert.equal(stored?.votes[0]?.state, "open");
+
+    named.destroy();
+    anon.destroy();
+  } finally {
+    await server.stop();
+  }
+});
+
+test("POKER-002: vote_open is server-owned — a supplied options list is ignored", async () => {
+  const server = await startServer();
+  try {
+    const room = await createRoom(server, { title: "Deck" });
+    const alice = await joinAs(server, room.code, "s-a", "Alice");
+    alice.send({
+      t: "vote_open",
+      title: "Hostile deck",
+      options: ["evil", "options", "must", "not", "survive"],
+    });
+    const opened = await alice.ofType("vote_new");
+    assert.deepEqual(opened.json?.vote.options, ["0", "0.5", "1", "2", "3", "5", "8", "13"]);
+    assert.deepEqual(Object.keys(opened.json?.vote.counts).sort(), [
+      "0",
+      "0.5",
+      "1",
+      "13",
+      "2",
+      "3",
+      "5",
+      "8",
+    ]);
+    alice.send({ t: "vote_cast", voteId: opened.json?.vote.id, choice: "evil" });
+    await alice.errorCode("bad_choice");
+    alice.destroy();
   } finally {
     await server.stop();
   }
@@ -177,27 +252,29 @@ test("vote_open → vote_cast → vote_close → vote_reopen transitions + event
     const alice = await joinAs(server, room.code, "s-a", "Alice");
     const bob = await joinAs(server, room.code, "s-b", "Bob");
 
-    alice.send({ t: "vote_open", title: "Who pays?", options: ["Bob", "Alice", "Split"] });
+    alice.send({ t: "vote_open", title: "Who pays?" });
     const opened = await bob.ofType("vote_new");
     const voteId = opened.json?.vote.id as string;
     assert.equal(opened.json?.vote.state, "open");
-    assert.deepEqual(opened.json?.vote.counts, { Bob: 0, Alice: 0, Split: 0 });
+    // POKER-002 AC1: the deck is server-owned and fixed.
+    assert.deepEqual(opened.json?.vote.options, ["0", "0.5", "1", "2", "3", "5", "8", "13"]);
+    assert.equal(opened.json?.vote.counts["3"], 0);
     assert.equal(opened.json?.vote.votedCount, 0);
     assert.equal(opened.json?.vote.totalMembers, 2);
 
     // Both clients hear about the cast, aggregate only.
-    bob.send({ t: "vote_cast", voteId, choice: "Bob" });
+    bob.send({ t: "vote_cast", voteId, choice: "3" });
     const update = await alice.ofType("vote_update");
-    assert.equal(update.json?.vote.counts.Bob, 1);
+    assert.equal(update.json?.vote.counts["3"], 1);
     assert.equal(update.json?.vote.votedCount, 1);
 
-    // vote_change overwrites (last write wins while open).
-    bob.send({ t: "vote_change", voteId, choice: "Alice" });
+    // vote_change overwrites (last write wins while open) — the round-2 move.
+    bob.send({ t: "vote_change", voteId, choice: "5" });
     const changed = await alice.waitFor(
-      (frame) => frame.json?.t === "vote_update" && frame.json?.vote.counts.Alice === 1,
+      (frame) => frame.json?.t === "vote_update" && frame.json?.vote.counts["5"] === 1,
       "vote_update after change",
     );
-    assert.equal(changed.json?.vote.counts.Bob, 0);
+    assert.equal(changed.json?.vote.counts["3"], 0);
     assert.equal(changed.json?.vote.votedCount, 1);
 
     // A cast on a closed vote is refused.
@@ -206,20 +283,21 @@ test("vote_open → vote_cast → vote_close → vote_reopen transitions + event
     assert.equal(closed.json?.vote.state, "closed");
     assert.deepEqual(
       closed.json?.vote.reveal,
-      [{ name: "Bob", choice: "Alice" }],
+      [{ name: "Bob", choice: "5" }],
     );
-    bob.send({ t: "vote_cast", voteId, choice: "Split" });
+    bob.send({ t: "vote_cast", voteId, choice: "8" });
     await bob.errorCode("vote_closed");
 
-    // Reopen: same vote, names hidden again, casts work.
+    // Reopen: the SAME world — the round-1 ballot stays, names hidden again.
     alice.send({ t: "vote_reopen", voteId });
     const reopened = await bob.ofType("vote_reopened");
     assert.equal(reopened.json?.vote.state, "open");
     assert.equal(reopened.json?.vote.id, voteId);
     assert.equal(reopened.json?.vote.reveal, undefined);
-    alice.send({ t: "vote_cast", voteId, choice: "Split" });
+    assert.equal(reopened.json?.vote.votedCount, 1, "reopen keeps the round-1 ballot");
+    alice.send({ t: "vote_cast", voteId, choice: "13" });
     await bob.waitFor(
-      (frame) => frame.json?.t === "vote_update" && frame.json?.vote.counts.Split === 1,
+      (frame) => frame.json?.t === "vote_update" && frame.json?.vote.counts["13"] === 1,
       "vote_update after reopen cast",
     );
 
@@ -250,22 +328,22 @@ test("anonymity: an OPEN vote never puts name/reveal/ballots on the wire (raw fr
     const bob = await joinAs(server, room.code, "s-b", "Bob");
     const carol = await joinAs(server, room.code, "s-c", "Carol");
 
-    alice.send({ t: "vote_open", title: "Who pays?", options: ["Bob", "Alice", "Split"] });
+    alice.send({ t: "vote_open", title: "Who pays?" });
     const opened = await bob.ofType("vote_new");
     assertNoAnonymityKeys(opened.raw, "vote_new (open)");
     const voteId = opened.json?.vote.id as string;
 
     // Every other connection sees its own aggregate-only update.
-    bob.send({ t: "vote_cast", voteId, choice: "Bob" });
+    bob.send({ t: "vote_cast", voteId, choice: "2" });
     const bobUpdate = await carol.waitFor(
       (frame) => frame.json?.t === "vote_update",
       "vote_update",
     );
     assertNoAnonymityKeys(bobUpdate.raw, "vote_update (open)");
-    assert.equal(bobUpdate.json?.vote.counts.Bob, 1);
+    assert.equal(bobUpdate.json?.vote.counts["2"], 1);
     assert.equal(bobUpdate.json?.vote.votedCount, 1);
 
-    carol.send({ t: "vote_cast", voteId, choice: "Split" });
+    carol.send({ t: "vote_cast", voteId, choice: "5" });
     const carolUpdate = await alice.waitFor(
       (frame) => frame.json?.t === "vote_update" && frame.json?.vote.votedCount === 2,
       "second vote_update",
@@ -293,8 +371,8 @@ test("anonymity: an OPEN vote never puts name/reveal/ballots on the wire (raw fr
     assert.deepEqual(
       reveal.map((entry) => [entry.name, entry.choice]).sort(),
       [
-        ["Bob", "Bob"],
-        ["Carol", "Split"],
+        ["Bob", "2"],
+        ["Carol", "5"],
       ],
     );
 
@@ -313,7 +391,7 @@ test("ordering: stable per viewer, different across viewers, self always last", 
       sessions.map((session, index) => joinAs(server, room.code, session, `P${index}`)),
     );
 
-    clients[0]!.send({ t: "vote_open", title: "Order test", options: ["a", "b"] });
+    clients[0]!.send({ t: "vote_open", title: "Order test" });
     const voteId = (await clients[0]!.ofType("vote_new")).json?.vote.id as string;
 
     const orders: Record<string, string[]> = {};
@@ -348,7 +426,7 @@ test("ordering: stable per viewer, different across viewers, self always last", 
   }
 });
 
-test("caps: options, name length, votes-per-room and members-per-room are clean errors", async () => {
+test("caps: name length, votes-per-room and members-per-room are clean errors", async () => {
   const server = await startServer();
   try {
     // 200 members already in the room → a new session cannot join.
@@ -366,7 +444,7 @@ test("caps: options, name length, votes-per-room and members-per-room are clean 
     await overflow.errorCode("room_full");
     overflow.destroy();
 
-    // 50 votes already created → vote_open is refused.
+    // 50 votes already created → a NAMED member's vote_open is refused.
     const busy = await server.db.create({
       title: "Busy",
       votes: Array.from({ length: 50 }, (_, index) => ({
@@ -380,33 +458,32 @@ test("caps: options, name length, votes-per-room and members-per-room are clean 
         ballots: [],
       })),
     });
-    const voter = await join(server, busy.code, "s-voter");
-    voter.send({ t: "vote_open", title: "Too many", options: ["a"] });
+    const voter = await joinAs(server, busy.code, "s-voter", "Voter");
+    voter.send({ t: "vote_open", title: "Too many" });
     await voter.errorCode("too_many_votes");
 
     const room = await createRoom(server, { title: "Caps" });
     const client = await join(server, room.code, "s-caps");
 
+    // POKER-002 AC2: still unnamed, so the vote gate fires first.
+    client.send({ t: "vote_open", title: "No name yet" });
+    await client.errorCode("name_required");
+
     client.send({ t: "claim", name: "x".repeat(25) });
     await client.errorCode("name_too_long");
     client.send({ t: "claim", name: "   " });
     await client.errorCode("bad_name");
-
-    client.send({
-      t: "vote_open",
-      title: "Too many options",
-      options: Array.from({ length: 33 }, (_, index) => `option-${index}`),
-    });
-    await client.errorCode("too_many_options");
+    client.send({ t: "claim", name: "Caps" });
+    await client.ofType("claim_ok");
 
     // A valid vote still works right after the rejections.
-    client.send({ t: "vote_open", title: "Fine", options: ["yes", "no"] });
+    client.send({ t: "vote_open", title: "Fine" });
     const opened = await client.ofType("vote_new");
     const voteId = opened.json?.vote.id as string;
 
     client.send({ t: "vote_cast", voteId, choice: "not-an-option" });
     await client.errorCode("bad_choice");
-    client.send({ t: "vote_cast", voteId: "v-does-not-exist", choice: "yes" });
+    client.send({ t: "vote_cast", voteId: "v-does-not-exist", choice: "3" });
     await client.errorCode("bad_vote");
 
     client.destroy();

@@ -14,13 +14,28 @@ import type { Member, Room, Vote, VoteState } from "./db.ts";
 
 /** Caps from POKER-001a AC11 — exceeding one is a clean `error`, never a crash. */
 export const MAX_MESSAGE_BYTES = 64 * 1024;
-export const MAX_OPTIONS = 32;
 export const MAX_NAME_LENGTH = 24;
 export const MAX_MEMBERS = 200;
 export const MAX_VOTES = 50;
 export const MAX_TITLE_LENGTH = 80;
-export const MAX_OPTION_LENGTH = 80;
 export const MAX_PASSCODE_LENGTH = 128;
+
+/**
+ * The ONE vote deck (POKER-002 AC1). Planning poker's Fibonacci scale.
+ * A vote's options are server-owned: `vote_open` carries only a title and any
+ * client-supplied `options` is ignored, so a room can never be handed a custom
+ * or hostile deck. Frozen — change it only with a new ticket that says so.
+ */
+export const VOTE_DECK: readonly string[] = Object.freeze([
+  "0",
+  "0.5",
+  "1",
+  "2",
+  "3",
+  "5",
+  "8",
+  "13",
+]);
 
 /** Per-connection message rate limit (AC11 `rate_limited`). */
 export const RATE_LIMIT_MESSAGES = 60;
@@ -175,7 +190,17 @@ function nextVoteId(room: Room): string {
   return `v${max + 1}`;
 }
 
-/** R7: claim/rename with uniqueness enforced on the serialized mutation. */
+/**
+ * POKER-002 AC2: a session may act on votes only after it has claimed a name.
+ * Read from the room itself (never the connection's cached name) so the check
+ * runs inside `db.mutate` and cannot race a concurrent claim.
+ */
+export function isNamed(room: Room, session: string): boolean {
+  const member = room.members.find((candidate) => candidate.session === session);
+  return typeof member?.name === "string" && member.name.trim() !== "";
+}
+
+/** R7: claim a name; POKER-002 AC3: a claimed name is permanent. */
 export function applyClaim(
   room: Room,
   input: { session: string; name: unknown; now: number },
@@ -185,12 +210,25 @@ export function applyClaim(
   if (name === "") return { ok: false, code: "bad_name" };
   if (name.length > MAX_NAME_LENGTH) return { ok: false, code: "name_too_long" };
   const folded = name.toLowerCase();
+  const existing = room.members.find((member) => member.session === input.session);
+
+  // POKER-002 AC3: once claimed, the name is locked. Re-claiming the SAME name
+  // is an idempotent ok (reconnect / reload re-sends it); anything else is
+  // refused. Checked before the collision scan so a locked member never sees
+  // the more specific `name_taken` for a name they were never allowed to take.
+  if (existing && typeof existing.name === "string" && existing.name.trim() !== "") {
+    if (existing.name.trim().toLowerCase() === folded) {
+      existing.lastSeenAt = input.now;
+      return { ok: true, name: existing.name };
+    }
+    return { ok: false, code: "name_locked" };
+  }
+
   const collides = room.members.some(
     (member) => member.session !== input.session && member.name.toLowerCase() === folded,
   );
   if (collides) return { ok: false, code: "name_taken" };
 
-  const existing = room.members.find((member) => member.session === input.session);
   if (existing) {
     existing.name = name;
     existing.lastSeenAt = input.now;
@@ -208,29 +246,20 @@ export function applyClaim(
 
 export function applyOpenVote(
   room: Room,
-  input: { title: unknown; options: unknown; by: string; now: number },
+  input: { title: unknown; by: string; now: number },
 ): MutationResult<{ vote: Vote }> {
+  // POKER-002 AC2: no name, no vote operations.
+  if (!isNamed(room, input.by)) return { ok: false, code: "name_required" };
   if (typeof input.title !== "string") return { ok: false, code: "bad_title" };
   const title = input.title.trim();
   if (title === "" || title.length > MAX_TITLE_LENGTH) return { ok: false, code: "bad_title" };
-  if (!Array.isArray(input.options) || input.options.length === 0) {
-    return { ok: false, code: "bad_options" };
-  }
-  if (input.options.length > MAX_OPTIONS) return { ok: false, code: "too_many_options" };
-  const options: string[] = [];
-  for (const option of input.options) {
-    if (typeof option !== "string") return { ok: false, code: "bad_options" };
-    const clean = option.trim();
-    if (clean === "" || clean.length > MAX_OPTION_LENGTH) return { ok: false, code: "bad_options" };
-    options.push(clean);
-  }
-  if (new Set(options).size !== options.length) return { ok: false, code: "bad_options" };
   if (room.votes.length >= MAX_VOTES) return { ok: false, code: "too_many_votes" };
 
   const vote: Vote = {
     id: nextVoteId(room),
     title,
-    options,
+    // POKER-002 AC1: the deck is server-owned; `vote_open` cannot choose it.
+    options: [...VOTE_DECK],
     state: "open",
     createdAt: input.now,
     closedAt: null,
@@ -245,6 +274,7 @@ export function applyCast(
   room: Room,
   input: { voteId: unknown; choice: unknown; session: string; now: number },
 ): MutationResult<{ vote: Vote; created: boolean }> {
+  if (!isNamed(room, input.session)) return { ok: false, code: "name_required" };
   if (typeof input.voteId !== "string" || typeof input.choice !== "string") {
     return { ok: false, code: "bad_message" };
   }
@@ -268,6 +298,7 @@ export function applyClose(
   room: Room,
   input: { voteId: unknown; by: string; now: number },
 ): MutationResult<{ vote: Vote }> {
+  if (!isNamed(room, input.by)) return { ok: false, code: "name_required" };
   if (typeof input.voteId !== "string") return { ok: false, code: "bad_message" };
   const vote = room.votes.find((candidate) => candidate.id === input.voteId);
   if (!vote) return { ok: false, code: "bad_vote" };
@@ -282,6 +313,7 @@ export function applyReopen(
   room: Room,
   input: { voteId: unknown; by: string; now: number },
 ): MutationResult<{ vote: Vote }> {
+  if (!isNamed(room, input.by)) return { ok: false, code: "name_required" };
   if (typeof input.voteId !== "string") return { ok: false, code: "bad_message" };
   const vote = room.votes.find((candidate) => candidate.id === input.voteId);
   if (!vote) return { ok: false, code: "bad_vote" };

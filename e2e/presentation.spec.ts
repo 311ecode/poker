@@ -88,7 +88,7 @@ test("AC5/AC7: the open strip is anonymous and ordered; close reveals; reopen re
     const a = await connectRoom(contextA, room.code, { name: "Alice" });
     const b = await connectRoom(contextB, room.code, { name: "Bob" });
 
-    const voteId = await openVote(a.page, "Who pays the tab?", ["Heads", "Tails"]);
+    const voteId = await openVote(a.page, "Who pays the tab?");
     await expect(voteCard(b.page, voteId)).toHaveAttribute("data-vote-state", "open");
 
     // AC5: one nameless row per member, self last, marked as you.
@@ -106,14 +106,14 @@ test("AC5/AC7: the open strip is anonymous and ordered; close reveals; reopen re
     await expect(voteCard(b.page, voteId)).not.toContainText("Bob");
 
     // AC6: the tally is a real "N of M voted" progress, updated live.
-    await castVote(a.page, voteId, "Heads");
-    await castVote(b.page, voteId, "Tails");
+    await castVote(a.page, voteId, "3");
+    await castVote(b.page, voteId, "5");
     await expect(voteCard(b.page, voteId).locator("[data-voted-count]")).toHaveText("2");
     await expect(voteCard(b.page, voteId).locator("[data-total-members]")).toHaveText("2");
     await expect(voteCard(b.page, voteId).locator("[data-progress-fill]")).toHaveAttribute("style", /width:\s*100%/);
 
     // A re-render (another cast) must not reorder the strip (AC5 stability).
-    await castVote(a.page, voteId, "Heads");
+    await castVote(a.page, voteId, "3");
     expect(await voterOrder(b.page, voteId)).toEqual(orderBefore);
 
     // AC7: close → the reveal moment, per-option bars, the named list.
@@ -125,9 +125,10 @@ test("AC5/AC7: the open strip is anonymous and ordered; close reveals; reopen re
     await expect(reveal.locator("[data-reveal-banner]")).toHaveAttribute("data-banner-text", "REVEAL");
     await expect(voteCard(b.page, voteId).locator('[data-reveal-entry][data-reveal-name="Alice"]')).toHaveCount(1);
     await expect(voteCard(b.page, voteId).locator('[data-reveal-entry][data-reveal-name="Bob"]')).toHaveCount(1);
-    await expect(voteCard(b.page, voteId).locator("[data-result-bar]")).toHaveCount(2);
+    // One bar per deck card (POKER-002: the fixed 8-card deck).
+    await expect(voteCard(b.page, voteId).locator("[data-result-bar]")).toHaveCount(8);
     await expect(
-      voteCard(b.page, voteId).locator('[data-result-bar][data-result-option="Heads"]'),
+      voteCard(b.page, voteId).locator('[data-result-bar][data-result-option="3"]'),
     ).toHaveAttribute("data-result-count", "1");
 
     // AC7: the animation is skippable and skipping does not hide the data.
@@ -156,8 +157,8 @@ test("AC8: history marks closed votes with the final result and keeps the events
   const context = await browser.newContext();
   try {
     const { page } = await connectRoom(context, room.code, { name: "Alice" });
-    const voteId = await openVote(page, "History me", ["Yes", "No"]);
-    await castVote(page, voteId, "Yes");
+    const voteId = await openVote(page, "History me");
+    await castVote(page, voteId, "3");
     await voteCard(page, voteId).locator('[data-action="close-vote"]').click();
     await expect(voteCard(page, voteId)).toHaveAttribute("data-vote-state", "closed");
 

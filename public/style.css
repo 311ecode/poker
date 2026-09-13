@@ -335,19 +335,48 @@ li {
   border-left-color: var(--muted);
 }
 
+/* POKER-002: the fixed deck reads as one row of cards. */
 [data-options] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   list-style: none;
   padding-left: 0;
 }
 
 [data-options] button {
-  min-width: 12rem;
-  text-align: left;
+  min-width: 4.5rem;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 1.05rem;
 }
 
+/* POKER-002 AC4: my own vote must be unmistakable. */
+[data-options] button[aria-pressed="true"],
 [data-self-choice="true"] {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  filter: brightness(1.18);
+}
+
+.your-vote {
+  margin: 0.35rem 0;
+  font-family: var(--mono);
+}
+
+.your-vote strong {
+  font-size: 1.15rem;
+  color: var(--accent);
+}
+
+.your-vote--none {
+  color: var(--muted);
+}
+
+.hint {
+  margin: 0.35rem 0;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .tally {

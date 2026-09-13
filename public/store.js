@@ -191,3 +191,61 @@ export function forgetRoom(storage, code) {
     readMyRooms(storage).filter((entry) => entry.code !== normalized),
   );
 }
+
+// ---------------------------------------------------------------------------
+// Own ballots — POKER-002. The viewer's own choices, remembered per room so
+// "my vote" survives a reload and a vote reopen. CLIENT-ONLY by contract: a
+// convenience mirror of the server's ballot, never sent anywhere.
+// ---------------------------------------------------------------------------
+
+/** `poker.selfchoices.<CODE>` -> `[[voteId, choice], …]`. */
+export const SELF_CHOICES_PREFIX = "poker.selfchoices.";
+
+function selfChoicesKey(code) {
+  const normalized = normalizeCode(code);
+  return normalized ? SELF_CHOICES_PREFIX + normalized : null;
+}
+
+/** The viewer's own `[voteId, choice]` pairs for a room; [] when none/corrupt. */
+export function readSelfChoices(storage, code) {
+  asStorage(storage);
+  const key = selfChoicesKey(code);
+  if (!key) return [];
+  const raw = readJson(storage, key, []);
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const entry of raw) {
+    if (!Array.isArray(entry) || entry.length !== 2) continue;
+    const [voteId, choice] = entry;
+    if (typeof voteId !== "string" || voteId === "") continue;
+    if (typeof choice !== "string" || choice === "") continue;
+    out.push([voteId, choice]);
+    if (out.length >= MY_ROOMS_LIMIT) break;
+  }
+  return out;
+}
+
+/** Persist the viewer's own choices for a room (capped, corrupt entries dropped). */
+export function writeSelfChoices(storage, code, entries) {
+  asStorage(storage);
+  const key = selfChoicesKey(code);
+  if (!key) return [];
+  const clean = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const voteId = Array.isArray(entry) ? entry[0] : entry?.voteId;
+    const choice = Array.isArray(entry) ? entry[1] : entry?.choice;
+    if (typeof voteId !== "string" || voteId === "") continue;
+    if (typeof choice !== "string" || choice === "") continue;
+    clean.push([voteId, choice]);
+    if (clean.length >= MY_ROOMS_LIMIT) break;
+  }
+  if (clean.length === 0) storage.removeItem(key);
+  else storage.setItem(key, JSON.stringify(clean));
+  return clean;
+}
+
+export function forgetSelfChoices(storage, code) {
+  asStorage(storage);
+  const key = selfChoicesKey(code);
+  if (key) storage.removeItem(key);
+}

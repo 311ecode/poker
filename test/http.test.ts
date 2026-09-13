@@ -60,11 +60,11 @@ test("POST /api/rooms creates a room; GET list/detail/history round-trip", async
     ).json()) as any;
     assert.deepEqual(history.votes, []);
 
-    // Open a vote so history has content, and cast anonymously.
+    // Open a vote so history has content, and cast on the fixed deck (POKER-002).
     const alice = await joinAs(server, room.code, "s-a", "Alice");
-    alice.send({ t: "vote_open", title: "History vote", options: ["yes", "no"] });
+    alice.send({ t: "vote_open", title: "History vote" });
     const voteId = (await alice.ofType("vote_new")).json?.vote.id as string;
-    alice.send({ t: "vote_cast", voteId, choice: "yes" });
+    alice.send({ t: "vote_cast", voteId, choice: "3" });
     await alice.ofType("vote_update");
 
     const openHistory = (await (
@@ -72,7 +72,7 @@ test("POST /api/rooms creates a room; GET list/detail/history round-trip", async
     ).json()) as any;
     assert.equal(openHistory.votes.length, 1);
     assert.equal(openHistory.votes[0].state, "open");
-    assert.equal(openHistory.votes[0].counts.yes, 1);
+    assert.equal(openHistory.votes[0].counts["3"], 1);
     assert.equal(openHistory.votes[0].votedCount, 1);
     assert.equal("reveal" in openHistory.votes[0], false, "open history must not reveal");
     assert.equal("ballots" in openHistory.votes[0], false);
@@ -82,7 +82,7 @@ test("POST /api/rooms creates a room; GET list/detail/history round-trip", async
     const closedHistory = (await (
       await fetch(`${server.base}/api/rooms/${room.code}/history`)
     ).json()) as any;
-    assert.deepEqual(closedHistory.votes[0].reveal, [{ name: "Alice", choice: "yes" }]);
+    assert.deepEqual(closedHistory.votes[0].reveal, [{ name: "Alice", choice: "3" }]);
     alice.destroy();
   } finally {
     await server.stop();

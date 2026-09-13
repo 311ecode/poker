@@ -332,10 +332,8 @@ export function createPokerServer(options: PokerServerOptions = {}): PokerServer
           return;
         }
         case "vote_open": {
-          const result = await hub.openVote(peer, {
-            title: message.title,
-            options: message.options,
-          });
+          // POKER-002: the deck is server-owned — only the title crosses.
+          const result = await hub.openVote(peer, { title: message.title });
           if (!result.ok) peer.send({ t: "error", code: result.code });
           return;
         }
