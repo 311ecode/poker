@@ -85,5 +85,5 @@ longer reach a ballot control at all.
 | Check | Result |
 |---|---|
 | Local probe (link / typed code / after naming) | `name`, `name`, `live` — votes+invite hidden until named, field focused |
-| Live entry checks (temporary probe, test room cleaned up) | see the deploy log: gate on both paths, claim → live |
+| **Live, 14/14 checks** (temporary probe, test rooms deleted) | link → name gate (field focused, votes + invite hidden) · claim → live + invite appears · **typed code → name gate** · protected: passcode gate → name gate → room |
 | `npm run test:e2e:live` (sanctioned smoke) | **3 passed** |

@@ -66,4 +66,8 @@ later, went quiet again, and was dropped again. The dance is the proxy's idle ti
 |---|---|
 | `npm test` | **122 passed / 0 failed** |
 | `npm run test:e2e` | **39 passed / 3 skipped (gated live smoke) / 0 failed** |
-| Live, 150s quiet room | **one socket, no close, no reconnect** (was: dropped at 125.5s) |
+| Live, 150s quiet room | **one socket, 0 closes, 5 pings / 5 pongs, `[data-connection]` never left `open`** (before: closed at 125.5s and reopened) |
+
+The live run is the falsification that matters: the same probe that caught the dance
+(`0.5s open → 125.6s closed → 125.9s connecting → 126.0s open`) now reports a single
+`0.8s open` transition for the whole 150s window.
