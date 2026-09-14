@@ -3,7 +3,7 @@
 **Project:** poker (main) · **Created:** 2026-09-14
 **Reporter:** user — *"this and this is a bit too much maybe … we might want it to be more subtle …
 if the user gets a link to a room and can get there and/or can type the pincode"*.
-**Status:** **IMPLEMENTED — tests green, committed locally, NOT pushed / NOT deployed.**
+**Status:** **DONE — pushed (`1286a01`) and live at https://poker.imre.dev.**
 **Scope:** presentation + entry flow only. The anonymity contract (POKER-001 §1.2 R1–R7) and the
 WebSocket protocol are untouched.
 
@@ -95,6 +95,20 @@ room; horizontal overflow **0** at both widths; invite value
 Screenshots for review (outside the repo, `~/dev/poker-shots/`): home light/dark, create open, room
 light/dark, gate light/dark, mobile home/room/gate.
 
+### Live verification (deployed origin, 2026-09-14)
+
+g2 was at `aead322` (POKER-014) with a clean tree; `package.json` / `package-lock.json` /
+`server.ts` were unchanged across `aead322..1286a01`, so no reinstall was needed.
+`git fetch origin && git reset --hard origin/main` → `1286a01`, `pm2 restart poker` → online.
+
+| Check | Result |
+|---|---|
+| `GET /api/health` | `ok:true`, `build:1789382280531` |
+| Deployed HTML | `data-create-disclosure`, `data-gate`, `data-invite-url`, `data-room-state` present; `join-passcode` **absent**; assets stamped `?v=<build>` |
+| `npm run test:e2e:live` (sanctioned smoke) | **3 passed** |
+| Live entry-flow probe (temporary, cleaned up) | **17/17** — one-field Home · 3 visible banners · gate state + in-place error + focused field · wrong passcode stays · right passcode admits · invite code-only then opt-in passcode · header art hidden in room · title whispered (8px, 40px tall) · reload with a passcode-less link goes straight in |
+| Production rooms after the run | **8** — the same pre-existing rooms, no `test`/`live-` leftovers |
+
 ---
 
 ## 3. Acceptance criteria
@@ -113,9 +127,10 @@ light/dark, gate light/dark, mobile home/room/gate.
 `public/index.html` · `public/style.css` · `public/app.js` · `e2e/entry.spec.ts` (new) ·
 `e2e/helpers.ts` · `e2e/rooms.spec.ts` · this ticket.
 
-## 5. Not done yet
+## 5. Landing
 
-- **Push** to `311ecode/poker` and **deploy** to g2 (`git reset --hard origin/main` + PM2 restart)
-  are deliberately held for the user's go-ahead — this is the live `poker.imre.dev`.
-- `/resetdata?scope=test` on the deployed origin once it is verified there.
-- Ticket moves to `tickets/done/` with `git mv` when pushed.
+- [x] Pushed to `311ecode/poker` (`114eef2..1286a01`); deployed on g2 (`git reset --hard
+      origin/main`, PM2 restart) and verified live (table above).
+- [x] No `/resetdata` was called on the deployed origin; the live suites deleted their own test
+      rooms.
+- [x] Ticket moved to `tickets/done/` with `git mv`.
