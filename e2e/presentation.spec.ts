@@ -13,6 +13,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   castVote,
+  claimName,
   connectRoom,
   createRoomViaApi,
   openVote,
@@ -59,6 +60,9 @@ test("AC4: every screen carries a generated banner and a defined empty/loading/e
   const room = await createRoomViaApi(request, { title: uniqueTitle("present") });
   await page.goto(`/#/room/${room.code}`);
   await expect(page.locator("[data-panel='room']")).toBeVisible();
+  // POKER-019: an unidentified visitor answers the name gate before the room.
+  await claimName(page, "Presenter");
+  await expect(page.locator('[data-panel="room"]')).toHaveAttribute("data-room-state", "live");
   await expect(page.locator("[data-room-banner]")).toHaveAttribute("data-banner-text", room.title);
   await expect(page.locator("[data-votes]")).toHaveAttribute("data-votes-state", "empty");
   await expect(page.locator('[data-empty="votes"]')).toBeVisible();

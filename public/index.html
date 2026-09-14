@@ -133,6 +133,29 @@
           <span class="visually-hidden" data-room-title></span>
         </p>
 
+        <!--
+          POKER-019: the name gate. A visitor is not IN the room until they have a
+          name, so this sits directly under the room-bar and nothing of the room
+          (members, votes, history, the invite link) is shown until it is answered.
+          No matter how you arrived — a link or a typed code — an unidentified
+          visitor is asked here, once.
+
+          POKER-005 still owns the form's lifetime: app.js REMOVES it from the DOM
+          as soon as a name exists, so a live room has no claim and no rename.
+        -->
+        <div class="gate gate--name" data-name-gate hidden>
+          <h2>Who are you?</h2>
+          <p class="hint">
+            Pick a name — it is how everyone else sees you, and it is final for this room.
+          </p>
+          <div data-claim-slot>
+            <form data-form="claim" hidden>
+              <label>Name <input data-input="name" autocomplete="off" maxlength="24" /></label>
+              <button type="submit" data-action="claim-name">Join the room</button>
+            </form>
+          </div>
+        </div>
+
         <!-- POKER-017 (D3-c): the invite link, with the passcode strictly opt-in. -->
         <p class="share" data-share hidden>
           <label class="visually-hidden" for="poker-invite-url">Invite link</label>
@@ -184,18 +207,6 @@
           <button type="button" data-action="copy-passcode">Copy</button>
         </p>
 
-        <!--
-          POKER-005: the claim form exists ONLY while it is the path — in a room,
-          unnamed. Once a name is claimed, app.js REMOVES it from the DOM, so
-          there is no claim and no rename control in a room.
-        -->
-        <div data-claim-slot>
-          <form data-form="claim" hidden>
-            <h2>Claim a name</h2>
-            <label>Name <input data-input="name" autocomplete="off" maxlength="24" /></label>
-            <button type="submit" data-action="claim-name">Claim name</button>
-          </form>
-        </div>
         <p data-you-line>
           You are <strong data-you-name></strong>
           (<code data-you-session></code>)

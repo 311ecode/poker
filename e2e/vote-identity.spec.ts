@@ -28,25 +28,27 @@ test("POKER-002 AC1/AC5: the fixed deck is rendered and the name is the gate", a
     const a = await connectRoom(contextA, room.code, { name: "Alice" });
     const b = await connectRoom(contextB, room.code); // joins unnamed
 
-    // Unnamed: the claim form is the gate, the vote controls are not offered.
+    // POKER-019: an unnamed visitor is at the name gate — the claim form, and
+    // none of the room behind it.
+    await expect(b.page.locator('[data-panel="room"]')).toHaveAttribute("data-room-state", "name");
     await expect(b.page.locator('[data-form="claim"]')).toBeVisible();
     await expect(b.page.locator('[data-form="open-vote"]')).toBeHidden();
-    await expect(b.page.locator("[data-need-name]")).toBeVisible();
+    await expect(b.page.locator('[data-section="votes"]')).toBeHidden();
+    await expect(b.page.locator("[data-section='members']")).toBeHidden();
 
     const voteId = await openVote(a.page, "How many points?");
+
+    // Claiming flips the gate: the deck appears, exactly as the server owns it.
+    await claimName(b.page, "Bob");
+    await expect(b.page.locator('[data-panel="room"]')).toHaveAttribute("data-room-state", "live");
+    await expect(b.page.locator('[data-form="claim"]')).toHaveCount(0);
+    await expect(b.page.locator('[data-form="open-vote"]')).toBeVisible();
+
     const card = voteCard(b.page, voteId);
     // POKER-004: exactly the fixed deck, in order, as select options at 0.
     await expect(card.locator("[data-choice-select] option[data-choice]")).toHaveText(
       DECK.map((option) => `${option} (0)`),
     );
-    // No name, no ballot: the select is disabled for the unnamed viewer.
-    await expect(card.locator("[data-choice-select]")).toBeDisabled();
-
-    // Claiming flips the gate: the deck becomes usable, the form is gone.
-    await claimName(b.page, "Bob");
-    await expect(b.page.locator('[data-form="claim"]')).toHaveCount(0);
-    await expect(b.page.locator('[data-form="open-vote"]')).toBeVisible();
-    await expect(b.page.locator("[data-need-name]")).toBeHidden();
     await expect(card.locator("[data-choice-select]")).toBeEnabled();
 
     await castVote(b.page, voteId, "3");

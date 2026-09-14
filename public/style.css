@@ -348,6 +348,17 @@ h3 {
   color: var(--text);
 }
 
+/* POKER-019: the name gate. Same card as the passcode gate, but the room is
+ * already known here, so it sits directly under the room-bar and the rest of the
+ * room is not shown until it is answered. */
+.gate--name {
+  margin-top: 0.25rem;
+}
+
+.gate--name h2 {
+  font-size: 1.15rem;
+}
+
 .gate .alert {
   margin-top: 0;
   margin-bottom: 0.6rem;

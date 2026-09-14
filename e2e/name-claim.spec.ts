@@ -120,18 +120,27 @@ test("POKER-003: a claimed name is burned into the browser and used, never re-cl
 // POKER-006: an unnamed visitor can always claim, and is never a raw UUID
 // ---------------------------------------------------------------------------
 
-test("POKER-006: an unnamed member reads 'not named yet', never a raw session id", async ({ browser, request }) => {
+test("POKER-006/019: an unnamed visitor is gated, and the roster never shows a raw session id", async ({ browser, request }) => {
   const room = await createRoomViaApi(request, { title: uniqueTitle("unnamed") });
-  const context = await browser.newContext();
+  const namedContext = await browser.newContext();
+  const anonContext = await browser.newContext();
   try {
-    const page = await context.newPage();
-    await enterRoom(page, room.code);
-    await expectConnection(page, "open");
-    const member = page.locator("[data-member]").first();
-    await expect(member).toContainText("not named yet");
-    await expect(member).not.toContainText("s-");
+    const a = await connectRoom(namedContext, room.code, { name: "Alice" });
+    const b = await connectRoom(anonContext, room.code); // joins unnamed
+
+    // POKER-019: the unnamed visitor is at the name gate — the roster is not
+    // theirs to read until they have a name.
+    await expect(b.page.locator('[data-panel="room"]')).toHaveAttribute("data-room-state", "name");
+    await expect(b.page.locator('[data-section="members"]')).toBeHidden();
+
+    // A named member sees them on the roster as "not named yet" — never a raw
+    // session id (POKER-006).
+    const unnamed = a.page.locator("[data-member]").filter({ hasText: "not named yet" });
+    await expect(unnamed).toHaveCount(1);
+    await expect(unnamed).not.toContainText("s-");
   } finally {
-    await context.close();
+    await namedContext.close();
+    await anonContext.close();
   }
 });
 

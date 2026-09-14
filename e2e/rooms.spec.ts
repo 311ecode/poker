@@ -10,7 +10,7 @@
 // the passcode or its hash.
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { expectConnection, expectError, goHome, openHome, createRoomViaApi, uniqueTitle } from "./helpers.js";
+import { claimName, expectConnection, expectError, goHome, openHome, createRoomViaApi, uniqueTitle } from "./helpers.js";
 
 const summary = (page: Page, code: string): Locator =>
   page.locator(`[data-room-summary][data-room-summary-code="${code}"]`);
@@ -103,6 +103,11 @@ test("AC4: create + find rooms; a protected room is discoverable but gated; wron
     await expectConnection(intruder, "open");
     await expect(intruder.locator("[data-error]")).toHaveAttribute("data-error", "");
     await expect(intruder.locator("[data-you-session]")).not.toHaveText("");
+    // POKER-019: past the passcode, an unidentified visitor still answers the
+    // name gate before the room's own controls appear.
+    await expect(intruder.locator('[data-panel="room"]')).toHaveAttribute("data-room-state", "name");
+    await claimName(intruder, "Intruder");
+    await expect(intruder.locator("[data-you-name]")).toHaveText("Intruder");
     // POKER-007: an admitted member can read the passcode back and share it.
     await expect(intruder.locator("[data-room-passcode]")).toHaveText("s3cret");
 

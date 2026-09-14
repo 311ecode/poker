@@ -15,6 +15,7 @@
 // protocol or state logic changed; every landed `data-*` hook is intact.
 
 import { renderBanner } from "./asciiFont.js";
+import { createHeartbeat } from "./heartbeat.js";
 import { messageFor } from "./messages.js";
 import { openVoteViolations } from "./leakguard.js";
 import {
@@ -119,6 +120,7 @@ const els = {
   error: $("[data-error]"),
   gate: $("[data-gate]"),
   gateForm: $('[data-form="retry-join"]'),
+  nameGate: $("[data-name-gate]"),
   share: $("[data-share]"),
   sharePasscode: $("[data-share-passcode]"),
   inviteUrl: $("[data-invite-url]"),
@@ -229,6 +231,8 @@ function applyBannerMode() {
 let socket = null;
 let reconnectTimer = null;
 let reconnectDelay = 250;
+// POKER-018: the keepalive that stops the tunnel from dropping a quiet socket.
+let heartbeat = null;
 
 function wsUrl() {
   const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -253,6 +257,10 @@ function closeSocket() {
   clearTimeout(reconnectTimer);
   reconnectTimer = null;
   clearAutoClaimTimer();
+  // POKER-018: this nulls `socket` before closing, so the socket's own close
+  // handler bails — the keepalive must be stopped here or it outlives the socket.
+  heartbeat?.stop();
+  heartbeat = null;
   const current = socket;
   socket = null;
   if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) {
@@ -278,10 +286,31 @@ function connect() {
     const hello = { t: "hello", room: state.roomCode, session: state.you.session };
     if (state.passcode) hello.passcode = state.passcode;
     send(hello);
+    // POKER-018: speak up every 25s. A quiet room carries no traffic otherwise,
+    // and the Cloudflare tunnel closes an idle WebSocket at ~100-125s — which is
+    // the connect/disconnect dance the user saw. `onDead` closes the socket, so
+    // the ordinary close handler does the reconnecting.
+    heartbeat?.stop();
+    heartbeat = createHeartbeat({
+      send: (frame) => {
+        if (socket === ws) send(frame);
+      },
+      onDead: () => {
+        try {
+          ws.close();
+        } catch {
+          /* the close handler owns recovery */
+        }
+      },
+    });
+    heartbeat.start();
   });
 
   ws.addEventListener("message", (event) => {
     if (socket !== ws) return;
+    // Any inbound frame — the pong, a presence broadcast, nothing special — is
+    // proof the link is alive.
+    heartbeat?.touch();
     const payload = typeof event.data === "string" ? event.data : String(event.data);
     receivedFrames.push(payload);
     const leaks = openVoteViolations(payload);
@@ -298,6 +327,8 @@ function connect() {
 
   ws.addEventListener("close", () => {
     if (socket !== ws) return;
+    heartbeat?.stop();
+    heartbeat = null;
     setConnection("closed");
     if (state.roomCode) {
       reconnectTimer = setTimeout(() => {
@@ -593,19 +624,37 @@ function renderAll() {
 }
 
 /**
- * POKER-017 (D3): where a room screen is in the entry flow.
+ * POKER-019: is the claim form the path right now? True only inside a room this
+ * browser has been admitted to, unnamed, and with no stored name to fall back on
+ * (or a stored one this room refused — POKER-006's stall guard sets that flag).
+ *
+ * This one predicate drives both the claim form's lifetime (POKER-005) and the
+ * `name` room state, so the form and the gate can never disagree.
+ */
+function nameIsThePath() {
+  if (state.route.name !== "room" || !state.room) return false;
+  if ((state.you.name ?? "") !== "") return false;
+  const stored = readName(storage).trim();
+  return stored === "" || state.claimRejected;
+}
+
+/**
+ * POKER-017/POKER-019: where a room screen is in the entry flow.
  *   connecting — hello sent, not admitted yet, no refusal
  *   gate       — refused for a passcode: the gate is the only thing on screen
  *   missing    — no such room: the header alert carries it, no room furniture
- *   live       — admitted: the real room
+ *   name       — admitted, but unidentified: the name gate, and nothing else
+ *   live       — admitted and named: the real room
  *   home       — not a room at all
  */
 function roomState() {
   if (state.route.name !== "room") return "home";
-  if (state.room) return "live";
-  if (state.error === "bad_passcode") return "gate";
-  if (state.error === "bad_room") return "missing";
-  return "connecting";
+  if (!state.room) {
+    if (state.error === "bad_passcode") return "gate";
+    if (state.error === "bad_room") return "missing";
+    return "connecting";
+  }
+  return nameIsThePath() ? "name" : "live";
 }
 
 /**
@@ -623,43 +672,62 @@ function inviteUrl() {
 }
 
 /**
- * POKER-017: the entry flow around a room — gate, invite line, and the one
- * `[data-error]` alert node placed next to the field it is about. Presentation of
- * existing state only: no protocol, and the anonymity rules are untouched.
+ * POKER-017/POKER-019: the entry flow around a room — the passcode gate, the name
+ * gate, the invite line, and the one `[data-error]` alert node placed next to the
+ * field it is about. Presentation of existing state only: no protocol, and the
+ * anonymity rules are untouched.
  * Returns the room state name (see `roomState`).
  */
 function renderEntryFlow() {
   const inRoom = state.route.name === "room";
   const view = roomState();
-  const admitted = view === "live";
+  const live = view === "live";
   const gated = view === "gate";
-  const bare = inRoom && !admitted;
+  const naming = view === "name";
+  // Before admission we do not even know the room, so its title banner would be
+  // an empty "ROOM" — hide it. While naming we DO know it, so it stays as context.
+  const contextless = inRoom && (gated || view === "missing");
 
   els.roomPanel.setAttribute("data-room-state", view);
   if (els.gate) els.gate.hidden = !gated;
-  // A visitor who has not been admitted sees the gate, not the room's furniture.
-  for (const section of els.roomSections) section.hidden = bare;
-  if (els.roomBanner) els.roomBanner.hidden = bare;
-  // The invite link is an admitted member's tool.
-  if (els.share) els.share.hidden = !admitted;
-  if (els.inviteUrl && admitted) els.inviteUrl.value = inviteUrl();
-  const knownPasscode = admitted && state.roomCode ? readPasscode(storage, state.roomCode) : "";
+  if (els.nameGate) els.nameGate.hidden = !naming;
+  // The room's furniture belongs to a member: gone while gated, missing, or
+  // still being named.
+  for (const section of els.roomSections) section.hidden = inRoom && !live;
+  if (els.roomBanner) els.roomBanner.hidden = contextless;
+  // The invite link is a member's tool — a name comes first.
+  if (els.share) els.share.hidden = !live;
+  if (els.inviteUrl && live) els.inviteUrl.value = inviteUrl();
+  const knownPasscode = live && state.roomCode ? readPasscode(storage, state.roomCode) : "";
   if (els.sharePasscode) els.sharePasscode.hidden = knownPasscode === "";
-  // One alert node, where it is actionable: inside the gate while gated, in the
-  // header everywhere else (POKER-015's placement).
+  // One alert node, where it is actionable: inside whichever gate is asking, in
+  // the header everywhere else (POKER-015's placement).
   if (els.error) {
-    const host = gated ? els.gate : els.header;
+    const host = naming ? els.nameGate : gated ? els.gate : els.header;
     if (els.error.parentElement !== host) {
       if (gated && els.gateForm) els.gate.insertBefore(els.error, els.gateForm);
+      else if (naming && els.claimSlot) els.nameGate.insertBefore(els.error, els.claimSlot);
       else els.header?.append(els.error);
     }
   }
-  // D3 extras: the cursor starts where the visitor must type. Never steal focus
-  // from a control they already reached, and never pop the mobile keyboard on
-  // Home (the gate is exempt — typing there is the whole job).
-  const target = gated ? els.roomPasscode : view === "home" ? els.joinCode : null;
-  const welcome = gated || (view === "home" && !compactQuery.matches);
-  if (target && welcome && document.activeElement === els.body) {
+  // D3 extras: the cursor starts where the visitor must type. A gate is the only
+  // job on screen, so it takes focus unless the visitor is already typing in it
+  // (never steal focus mid-edit — and the click that opened it left focus on a
+  // control that has just been hidden). Home only takes focus when nothing else
+  // has it, and never pops the mobile keyboard.
+  const target = gated
+    ? els.roomPasscode
+    : naming
+      ? els.nameInput
+      : view === "home"
+        ? els.joinCode
+        : null;
+  const gateHost = gated ? els.gate : naming ? els.nameGate : null;
+  const active = document.activeElement;
+  if (target && gateHost) {
+    const insideGate = active && typeof gateHost.contains === "function" && gateHost.contains(active);
+    if (!insideGate) target.focus({ preventScroll: true });
+  } else if (target && document.activeElement === els.body && !compactQuery.matches) {
     target.focus({ preventScroll: true });
   }
   return view;
@@ -695,12 +763,13 @@ function renderYou() {
 function renderChrome() {
   const inRoom = state.route.name === "room";
   const view = renderEntryFlow();
-  const admitted = view === "live";
+  const live = view === "live";
   const named = (state.you.name ?? "") !== "";
   const storedName = readName(storage).trim();
-  // POKER-017: before admission a visitor is not in the room, so the room's own
-  // controls (claim) are not on offer — the gate is the only path.
-  const claimable = inRoom && admitted && !named && (storedName === "" || state.claimRejected);
+  // POKER-019: the claim form is shown exactly while the name gate is up, and
+  // removed from the DOM the moment a name exists (POKER-005). One predicate, so
+  // the form and `data-room-state="name"` cannot disagree.
+  const claimable = nameIsThePath();
 
   if (els.claimForm && els.claimSlot) {
     if (claimable) {
@@ -719,11 +788,14 @@ function renderChrome() {
   }
   if (els.youLine) els.youLine.hidden = !inRoom || !named;
   if (els.openVoteForm) els.openVoteForm.hidden = !inRoom || !named;
-  if (els.needName) els.needName.hidden = !inRoom || named || !claimable;
+  // POKER-019: the hint is for a named member who has not claimed — an unnamed
+  // visitor never sees the votes at all, so it belongs to the live room only.
+  if (els.needName) els.needName.hidden = !live || named;
 
   // POKER-007: the room's passcode, for admitted members only (it is this
-  // browser's own copy — the server never sends a passcode).
-  const roomPasscode = admitted && state.roomCode ? readPasscode(storage, state.roomCode) : "";
+  // browser's own copy — the server never sends a passcode). POKER-019: a name
+  // comes first, so it is hidden while the name gate is up.
+  const roomPasscode = live && state.roomCode ? readPasscode(storage, state.roomCode) : "";
   if (els.passcodeLine) els.passcodeLine.hidden = roomPasscode === "";
   if (els.passcodeValue && roomPasscode !== "") els.passcodeValue.textContent = roomPasscode;
 }

@@ -114,7 +114,10 @@ test.describe("live smoke against the deployed origin", () => {
         "8 (0)",
         "13 (0)",
       ]);
-      await expect(guest.locator("[data-vote]").last().locator("[data-choice-select]")).toBeDisabled();
+      // POKER-019: the guest is at the name gate, so the votes are not rendered
+      // to them — no deck to read, let alone use.
+      await expect(guest.locator('[data-panel="room"]')).toHaveAttribute("data-room-state", "name");
+      await expect(guest.locator('[data-section="votes"]')).toBeHidden();
 
       // Choosing 3 sends it immediately → my own vote is stated and shown.
       await card.locator("[data-choice-select]").selectOption("3");
