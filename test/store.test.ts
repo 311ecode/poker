@@ -19,6 +19,7 @@ import {
   readSelfChoices,
   readSession,
   rememberRoom,
+  resetSession,
   ROOM_PASSCODE_PREFIX,
   SELF_CHOICES_PREFIX,
   STORAGE_KEYS,
@@ -62,6 +63,22 @@ test("ensureSession generates s-<uuid> once and reuses the stored id", () => {
   // A second call must not regenerate — the identity is per browser (§1.7).
   const second = ensureSession(storage, { randomUUID: () => uuid(2) });
   assert.equal(second, first);
+});
+
+test("POKER-020: resetSession mints a genuinely new id instead of reusing the refused one", () => {
+  const storage = memoryStorage();
+  const first = ensureSession(storage, { randomUUID: () => uuid(7) });
+  assert.equal(readSession(storage), first);
+
+  const second = resetSession(storage, { randomUUID: () => uuid(8) });
+  assert.equal(second, `s-${uuid(8)}`);
+  assert.notEqual(second, first, "a refused session id is never sent again");
+  assert.equal(readSession(storage), second, "the new id is persisted");
+
+  // …and it is idempotent in the sense that a *stored valid* id is still
+  // replaced on demand (that is the whole point: the server said no to it).
+  assert.equal(resetSession(storage, { randomUUID: () => uuid(9) }), `s-${uuid(9)}`);
+  assert.throws(() => resetSession(undefined, { randomUUID: () => uuid(1) }), TypeError);
 });
 
 test("ensureSession replaces a corrupt/blank stored session", () => {

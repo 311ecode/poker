@@ -103,6 +103,17 @@ export function readSession(storage) {
   return typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null;
 }
 
+/**
+ * POKER-020: throw the current session away and mint a fresh one. Used when the
+ * server refuses the id we sent (`bad_session`) — a stale or damaged id must not
+ * be a dead end, and nothing server-side is tied to it beyond room membership.
+ */
+export function resetSession(storage, cryptoObj) {
+  asStorage(storage);
+  storage.removeItem(STORAGE_KEYS.session);
+  return ensureSession(storage, cryptoObj);
+}
+
 /** The name is a prefill convenience only; the server owns the real name. */
 export function readName(storage) {
   asStorage(storage);

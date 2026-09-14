@@ -28,6 +28,7 @@ import {
   readSelfChoices,
   readSession,
   rememberRoom,
+  resetSession,
   writeLastRoom,
   writeName,
   writePasscode,
@@ -121,6 +122,8 @@ const els = {
   gate: $("[data-gate]"),
   gateForm: $('[data-form="retry-join"]'),
   nameGate: $("[data-name-gate]"),
+  retryCard: $("[data-retry]"),
+  retryButton: $('[data-action="retry-connect"]'),
   share: $("[data-share]"),
   sharePasscode: $("[data-share-passcode]"),
   inviteUrl: $("[data-invite-url]"),
@@ -233,6 +236,12 @@ let reconnectTimer = null;
 let reconnectDelay = 250;
 // POKER-018: the keepalive that stops the tunnel from dropping a quiet socket.
 let heartbeat = null;
+// POKER-020: "hello sent, nothing came back" must not be a dead end either.
+let helloTimeout = null;
+const HELLO_TIMEOUT_MS = 10_000;
+// One self-heal attempt per room per refusal, so a persistent refusal cannot loop.
+let resyncedNameFor = null;
+let resyncedSessionFor = null;
 
 function wsUrl() {
   const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -261,10 +270,19 @@ function closeSocket() {
   // handler bails — the keepalive must be stopped here or it outlives the socket.
   heartbeat?.stop();
   heartbeat = null;
+  clearHelloTimeout();
   const current = socket;
   socket = null;
   if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) {
     current.close();
+  }
+}
+
+/** POKER-020: cancel the "hello got no answer" guard. */
+function clearHelloTimeout() {
+  if (helloTimeout) {
+    clearTimeout(helloTimeout);
+    helloTimeout = null;
   }
 }
 
@@ -304,6 +322,20 @@ function connect() {
       },
     });
     heartbeat.start();
+    // POKER-020: if the server says NOTHING at all back, this socket is useless —
+    // close it so the ordinary close handler reconnects, instead of sitting on a
+    // "connecting" screen forever.
+    clearHelloTimeout();
+    helloTimeout = setTimeout(() => {
+      helloTimeout = null;
+      if (socket === ws) {
+        try {
+          ws.close();
+        } catch {
+          /* the close handler owns recovery */
+        }
+      }
+    }, HELLO_TIMEOUT_MS);
   });
 
   ws.addEventListener("message", (event) => {
@@ -311,6 +343,7 @@ function connect() {
     // Any inbound frame — the pong, a presence broadcast, nothing special — is
     // proof the link is alive.
     heartbeat?.touch();
+    clearHelloTimeout();
     const payload = typeof event.data === "string" ? event.data : String(event.data);
     receivedFrames.push(payload);
     const leaks = openVoteViolations(payload);
@@ -329,6 +362,7 @@ function connect() {
     if (socket !== ws) return;
     heartbeat?.stop();
     heartbeat = null;
+    clearHelloTimeout();
     setConnection("closed");
     if (state.roomCode) {
       reconnectTimer = setTimeout(() => {
@@ -499,6 +533,33 @@ function handleMessage(message) {
       return;
     case "error": {
       const code = typeof message.code === "string" ? message.code : "server_error";
+      // POKER-020: two refusals mean "the server already holds an identity for
+      // this session" or "the identity you sent is junk". Both are recoverable,
+      // and neither may leave the visitor trapped in a gate. Exactly one attempt
+      // per room, so a persistent refusal cannot turn into a loop.
+      if (code === "name_locked" && state.route.name === "room" && state.roomCode) {
+        // A lost claim_ok (the old connection dance did this), or a second tab
+        // that claimed first. Ask the server who we already are, instead of
+        // asking the visitor again for a name that cannot change.
+        if (resyncedNameFor !== state.roomCode) {
+          resyncedNameFor = state.roomCode;
+          clearError();
+          const hello = { t: "hello", room: state.roomCode, session: state.you.session };
+          if (state.passcode) hello.passcode = state.passcode;
+          send(hello);
+          return;
+        }
+      }
+      if (code === "bad_session" && state.route.name === "room" && state.roomCode) {
+        // A session id the server will not accept: mint a fresh one and re-open.
+        if (resyncedSessionFor !== state.roomCode) {
+          resyncedSessionFor = state.roomCode;
+          state.you.session = resetSession(storage, window.crypto);
+          clearError();
+          connect();
+          return;
+        }
+      }
       // POKER-006: an unnamed visitor must never be left with no way to claim.
       // Any refusal except "you are not in this room" re-opens the form (a taken
       // or locked stored name included).
@@ -573,6 +634,8 @@ function applyRoute() {
     state.passcode = route.passcode || readPasscode(storage, route.code) || "";
     state.room = changed ? null : state.room;
     if (changed) {
+      resyncedNameFor = null;
+      resyncedSessionFor = null;
       state.votes = new Map();
       state.orders = new Map();
       // POKER-003: a new room gets a fresh silent-claim attempt; a name refused
@@ -643,6 +706,9 @@ function nameIsThePath() {
  *   connecting — hello sent, not admitted yet, no refusal
  *   gate       — refused for a passcode: the gate is the only thing on screen
  *   missing    — no such room: the header alert carries it, no room furniture
+ *   retry      — admitted refused for any OTHER reason (bad session, server
+ *                error, rate limit): an explicit way forward, never a dead
+ *                "connecting" screen (POKER-020)
  *   name       — admitted, but unidentified: the name gate, and nothing else
  *   live       — admitted and named: the real room
  *   home       — not a room at all
@@ -652,6 +718,8 @@ function roomState() {
   if (!state.room) {
     if (state.error === "bad_passcode") return "gate";
     if (state.error === "bad_room") return "missing";
+    // POKER-020: any other refusal gets an explicit retry, not a dead end.
+    if (state.error) return "retry";
     return "connecting";
   }
   return nameIsThePath() ? "name" : "live";
@@ -684,13 +752,15 @@ function renderEntryFlow() {
   const live = view === "live";
   const gated = view === "gate";
   const naming = view === "name";
+  const retrying = view === "retry";
   // Before admission we do not even know the room, so its title banner would be
   // an empty "ROOM" — hide it. While naming we DO know it, so it stays as context.
-  const contextless = inRoom && (gated || view === "missing");
+  const contextless = inRoom && (gated || retrying || view === "missing");
 
   els.roomPanel.setAttribute("data-room-state", view);
   if (els.gate) els.gate.hidden = !gated;
   if (els.nameGate) els.nameGate.hidden = !naming;
+  if (els.retryCard) els.retryCard.hidden = !retrying;
   // The room's furniture belongs to a member: gone while gated, missing, or
   // still being named.
   for (const section of els.roomSections) section.hidden = inRoom && !live;
@@ -703,10 +773,17 @@ function renderEntryFlow() {
   // One alert node, where it is actionable: inside whichever gate is asking, in
   // the header everywhere else (POKER-015's placement).
   if (els.error) {
-    const host = naming ? els.nameGate : gated ? els.gate : els.header;
+    const host = naming
+      ? els.nameGate
+      : gated
+        ? els.gate
+        : retrying
+          ? els.retryCard
+          : els.header;
     if (els.error.parentElement !== host) {
       if (gated && els.gateForm) els.gate.insertBefore(els.error, els.gateForm);
       else if (naming && els.claimSlot) els.nameGate.insertBefore(els.error, els.claimSlot);
+      else if (retrying && els.retryButton) els.retryCard.insertBefore(els.error, els.retryButton);
       else els.header?.append(els.error);
     }
   }
@@ -719,10 +796,18 @@ function renderEntryFlow() {
     ? els.roomPasscode
     : naming
       ? els.nameInput
-      : view === "home"
-        ? els.joinCode
+      : retrying
+        ? els.retryButton
+        : view === "home"
+          ? els.joinCode
+          : null;
+  const gateHost = gated
+    ? els.gate
+    : naming
+      ? els.nameGate
+      : retrying
+        ? els.retryCard
         : null;
-  const gateHost = gated ? els.gate : naming ? els.nameGate : null;
   const active = document.activeElement;
   if (target && gateHost) {
     const insideGate = active && typeof gateHost.contains === "function" && gateHost.contains(active);
@@ -1247,6 +1332,12 @@ $('[data-form="create"]').addEventListener("submit", (event) => {
 });
 
 $('[data-action="find-rooms"]').addEventListener("click", () => void findRooms());
+
+// POKER-020: the explicit way out of a refusal that is not about the passcode.
+$('[data-action="retry-connect"]').addEventListener("click", () => {
+  clearError();
+  connect();
+});
 
 $('[data-form="retry-join"]').addEventListener("submit", (event) => {
   event.preventDefault();

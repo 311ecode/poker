@@ -155,3 +155,107 @@ test("D1-B: the block art is the hero on Home and only whispered inside a room",
   // And the invite link lives in the room bar.
   await expect(page.locator("[data-share]")).toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// POKER-020: no dead ends. A refusal that is not about the passcode — or an
+// identity the server already holds — must still leave a way forward.
+// ---------------------------------------------------------------------------
+
+test("POKER-020: two tabs racing one session's name do not trap the loser at the gate", async ({
+  browser,
+  request,
+}) => {
+  const room = await createRoomViaApi(request, { title: uniqueTitle("resync") });
+  const context = await browser.newContext();
+  try {
+    // Seed ONE session before either tab boots. Two tabs loading at once would
+    // otherwise race `ensureSession` and could keep their own ids — then the race
+    // under test (a name is locked per session) would not happen at all.
+    await context.addInitScript(() => {
+      if (!localStorage.getItem("poker.session")) {
+        localStorage.setItem("poker.session", "s-99999999-9999-4999-8999-999999999999");
+      }
+    });
+    const a = await context.newPage();
+    const b = await context.newPage();
+    await Promise.all([a.goto(`/#/room/${room.code}`), b.goto(`/#/room/${room.code}`)]);
+    await Promise.all([
+      a.waitForSelector('[data-room-state="name"]'),
+      b.waitForSelector('[data-room-state="name"]'),
+    ]);
+
+    // Both claim at once. A name is locked per session, so exactly one wins and
+    // the other is told `name_locked` — which must re-sync, not trap.
+    await Promise.all([
+      (async () => {
+        await a.locator('[data-input="name"]').fill("TabA");
+        await a.locator('[data-action="claim-name"]').click();
+      })(),
+      (async () => {
+        await b.locator('[data-input="name"]').fill("TabB");
+        await b.locator('[data-action="claim-name"]').click();
+      })(),
+    ]);
+
+    await expect(a.locator('[data-panel="room"]')).toHaveAttribute("data-room-state", "live");
+    await expect(b.locator('[data-panel="room"]')).toHaveAttribute("data-room-state", "live");
+    // Same browser, same session, so both tabs agree on the one winning name.
+    const nameA = await a.locator("[data-you-name]").textContent();
+    const nameB = await b.locator("[data-you-name]").textContent();
+    expect(nameA).toBeTruthy();
+    expect(nameA).toBe(nameB);
+    await expect(a.locator("[data-error]")).toHaveAttribute("data-error", "");
+    await expect(b.locator("[data-error]")).toHaveAttribute("data-error", "");
+    await expect(a.locator('[data-section="votes"]')).toBeVisible();
+    await expect(b.locator('[data-section="votes"]')).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("POKER-020: a refusal that is not the passcode offers a retry, never a dead connecting screen", async ({
+  page,
+  request,
+}) => {
+  const room = await createRoomViaApi(request, { title: uniqueTitle("retrycard") });
+  // Answer the client's FIRST hello with a non-passcode refusal. The flag lives
+  // OUTSIDE the handler: routeWebSocket runs it once per WebSocket, so a flag
+  // inside would refuse every reconnection too.
+  let refused = false;
+  await page.routeWebSocket(/\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      const text = typeof message === "string" ? message : message.toString();
+      let json: Record<string, unknown> | null = null;
+      try {
+        json = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        json = null;
+      }
+      if (json?.t === "hello" && !refused) {
+        refused = true;
+        ws.send(JSON.stringify({ t: "error", code: "server_error" }));
+        return;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => ws.send(message));
+  });
+
+  await page.goto(`/#/room/${room.code}`);
+  await expect(roomPanel(page)).toHaveAttribute("data-room-state", "retry");
+  await expect(page.locator("[data-retry]")).toBeVisible();
+  // The refusal is explained in place, with the way forward right there.
+  await expect(page.locator("[data-retry] [data-error]")).toHaveAttribute(
+    "data-error",
+    "server_error",
+  );
+  const retry = page.locator('[data-action="retry-connect"]');
+  await expect(retry).toBeVisible();
+  await expect(retry).toBeFocused();
+
+  // Trying again is admitted (only the first hello was refused).
+  await retry.click();
+  await expect(roomPanel(page)).toHaveAttribute("data-room-state", "name");
+  await expect(page.locator('[data-input="name"]')).toBeVisible();
+});

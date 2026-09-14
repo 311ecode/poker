@@ -201,6 +201,18 @@
           </form>
         </div>
 
+        <!--
+          POKER-020: the last resort. A room we could not be admitted to for a
+          reason that is NOT the passcode — a rejected session id, a server
+          hiccup, a rate limit — must never leave a dead "connecting" screen with
+          no way forward. app.js moves the single [data-error] alert in here.
+        -->
+        <div class="gate" data-retry hidden>
+          <h2>That did not work</h2>
+          <p class="hint">The room did not let us in. Try again — or go back and re-open the link.</p>
+          <button type="button" data-action="retry-connect">Try again</button>
+        </div>
+
         <!-- POKER-007: shown to admitted members so they can share it. -->
         <p class="room-passcode" data-room-passcode-line hidden>
           Passcode: <code data-room-passcode></code>
