@@ -68,6 +68,13 @@ html {
    * giving the page a horizontal scrollbar (AC9). */
   max-width: 100%;
   overflow-x: hidden;
+  /* POKER-016: this app manages its own scroll stability — POKER-011 captures
+   * `scrollTop` and restores it in the same task as every vote-list rebuild.
+   * Browser scroll anchoring competes with that: when ANOTHER member's vote
+   * grows the list, the anchor below it shifts the viewport a frame later,
+   * after our restore, by ~27px. The page is one column with nothing loaded
+   * above the viewport, so anchoring buys us nothing here — turn it off. */
+  overflow-anchor: none;
 }
 
 body {
