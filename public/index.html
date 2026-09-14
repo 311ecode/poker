@@ -30,7 +30,14 @@
         <pre class="banner-pre" data-banner-pre aria-hidden="true"></pre>
         <p class="banner-compact" data-banner-compact aria-hidden="true"></p>
       </div>
-      <p class="connection">connection: <span data-connection="closed">closed</span></p>
+      <!--
+        POKER-015: the connection line reports the ROOM socket, so it ships
+        hidden — the home screen has no socket and must not shout "closed" for
+        one it never opens. `renderRoute` reveals it inside a room.
+      -->
+      <p class="connection" data-connection-line hidden>
+        connection: <span data-connection="closed">closed</span>
+      </p>
       <p class="alert" data-error="" role="alert" hidden></p>
     </header>
 

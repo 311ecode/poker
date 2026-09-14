@@ -113,6 +113,7 @@ const els = {
   homePanel: $('[data-panel="home"]'),
   roomPanel: $('[data-panel="room"]'),
   connection: $("[data-connection]"),
+  connectionLine: $("[data-connection-line]"),
   error: $("[data-error]"),
   roomCode: $("[data-room-code]"),
   roomTitle: $("[data-room-title]"),
@@ -548,6 +549,10 @@ function applyRoute() {
     state.room = null;
     state.passcode = "";
     closeSocket();
+    // POKER-015: `closeSocket()` nulls `socket` before closing, so the socket's
+    // own `close` handler bails (`if (socket !== ws) return`) and never resets
+    // this. Set it here or home keeps a stale green "open" with no socket.
+    setConnection("closed");
   }
   renderAll();
 }
@@ -577,6 +582,9 @@ function renderRoute() {
   els.body.setAttribute("data-view", inRoom ? "room" : "home");
   els.homePanel.hidden = inRoom;
   els.roomPanel.hidden = !inRoom;
+  // POKER-015: the connection line reports the ROOM socket. Outside a room
+  // there is no socket, so any value it could show would be a lie — hide it.
+  if (els.connectionLine) els.connectionLine.hidden = !inRoom;
   els.roomCode.textContent = state.roomCode ?? "";
   els.roomTitle.textContent = state.room?.title ?? "";
   if (inRoom) els.roomPasscode.value = state.passcode ?? "";

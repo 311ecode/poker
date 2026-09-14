@@ -34,7 +34,10 @@ test("AC11: public/ is no-cache, plain ES modules, no build step", async ({ requ
   // The shell boots in a browser and exposes the data-* hooks the specs use.
   await page.goto("/");
   await expect(page.locator('[data-panel="home"]')).toBeVisible();
+  // POKER-015: the attribute hook stays, but the line is hidden on home — there
+  // is no room socket to report there. See e2e/connection-indicator.spec.ts.
   await expect(page.locator("[data-connection]")).toHaveAttribute("data-connection", "closed");
+  await expect(page.locator("[data-connection-line]")).toBeHidden();
   await expect(page.locator("[data-my-rooms]")).toBeAttached();
   await expect(page.locator("[data-rooms]")).toBeAttached();
   expect(await page.evaluate(() => typeof (globalThis as any).__pokerTest)).toBe("object");
