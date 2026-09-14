@@ -69,8 +69,26 @@ this, twice a minute) leaves the server with your name and the client believing 
 |---|---|
 | Falsification (heal disabled) | two-tab test **fails**: loser `data-room-state="name"` after 10s |
 | With the heal | two-tab test **passes** in 533ms, both tabs `live`, same name |
-| Full suite | unit **123/123** · e2e **41 passed / 3 skipped / 0 failed** |
-| Live origin | see the landing note below |
+| Full suite | unit **123/123** · e2e **41 passed / 3 skipped / 0 failed** (entry spec 7/7 on three consecutive runs) |
+| **Live origin, 6/6 checks × 3 runs** | passcode → name → live · two-tab race: neither trapped, both agree on the winning name, loser error-free (`LiveTabA` and `LiveTabB` winning in different runs) · non-passcode refusal shows the retry card, and retry is admitted |
+
+**A correction worth recording.** The first live run reported one failure — *"both agree on the
+winning name — /LiveTabB"* — which looked like the heal not delivering the name. It was **the
+check**, not the app: the loser's gate closes the instant the shared storage shows the winner's name
+(`nameIsThePath()` reads storage), and that tab's own name arrives one round trip later from the
+re-sync `hello`. Sampling `[data-you-name]` in the same breath as `live` reads it empty. The frames
+prove the heal is correct:
+
+```
+[A] SENT claim LiveTabA      [A] RECV claim_ok  you.name=LiveTabA
+[B] SENT claim LiveTabB      [B] RECV error name_locked
+[B] SENT hello               [B] RECV hello_ok  you.name=LiveTabA     → both tabs live, same name
+```
+
+Both the e2e and the live probe now **wait** for the name rather than sampling it after the state
+flip. Nothing in the product needed changing for this; the transient (a live tab whose own name is
+one round trip behind) is harmless — it resolves within a frame, and the 10s hello guard recovers it
+if that frame is lost.
 
 ## 6. Files
 

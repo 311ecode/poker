@@ -199,10 +199,14 @@ test("POKER-020: two tabs racing one session's name do not trap the loser at the
 
     await expect(a.locator('[data-panel="room"]')).toHaveAttribute("data-room-state", "live");
     await expect(b.locator('[data-panel="room"]')).toHaveAttribute("data-room-state", "live");
-    // Same browser, same session, so both tabs agree on the one winning name.
+    // The loser's gate closes the moment the shared storage shows the winner's
+    // name (nameIsThePath() reads it), and its own name arrives one round trip
+    // later from the re-sync hello — so WAIT for the name, never sample it in the
+    // same breath as the state.
+    await expect(a.locator("[data-you-name]")).not.toHaveText("", { timeout: 15_000 });
+    await expect(b.locator("[data-you-name]")).not.toHaveText("", { timeout: 15_000 });
     const nameA = await a.locator("[data-you-name]").textContent();
     const nameB = await b.locator("[data-you-name]").textContent();
-    expect(nameA).toBeTruthy();
     expect(nameA).toBe(nameB);
     await expect(a.locator("[data-error]")).toHaveAttribute("data-error", "");
     await expect(b.locator("[data-error]")).toHaveAttribute("data-error", "");
