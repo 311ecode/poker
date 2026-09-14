@@ -3,7 +3,7 @@
 **Project:** poker (main) · **Created:** 2026-09-13
 **Reporter:** user — *"this is tricky as it is not closed but it is saying closed on the opening page..
 well maybe shall not say anything .. make tests for the before"*
-**Status:** **IN PROGRESS**
+**Status:** **DONE** (2026-09-13) — landed on `main` (`05d7a68`), pushed.
 
 ## 0. The two false states (verified in a browser, not by reading alone)
 
@@ -52,7 +52,7 @@ in-room vocabulary (`connecting` / `open` / `closed`) exactly as it is.
       and reconnects to a visible `open` (regression guard on the real signal).
 - [x] AC5 — `e2e/client-shell.spec.ts` asserts the new contract (hidden on home) instead of the old
       `closed`-is-shown behaviour.
-- [ ] AC6 — `npm test` and `npm run test:e2e` green; ticket committed, pushed, moved to
+- [x] AC6 — `npm test` and `npm run test:e2e` green; ticket committed, pushed, moved to
       `tickets/done/`.
 
 ## 3. Files
