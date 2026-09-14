@@ -44,30 +44,48 @@
     <main>
       <!-- =============================== HOME =============================== -->
       <section data-panel="home">
-        <form data-form="join">
-          <h2>Join a room</h2>
-          <label>Room code <input data-input="join-code" name="code" autocomplete="off" /></label>
-          <label>
-            Passcode (only if the room has one)
-            <input data-input="join-passcode" name="passcode" type="password" autocomplete="off" />
-          </label>
-          <button type="submit" data-action="join">Join</button>
-        </form>
+        <!--
+          POKER-017 (D2-A): Home is one door, not a form. The room code is the
+          only field on first paint; a protected room is answered at the gate on
+          the room screen ([data-panel="room"][data-room-state="gate"]), never
+          pre-emptively here.
+        -->
+        <section data-section="enter">
+          <h2>Enter a room code</h2>
+          <form data-form="join">
+            <label class="visually-hidden" for="poker-join-code">Room code</label>
+            <div class="enter-row">
+              <input
+                id="poker-join-code"
+                data-input="join-code"
+                name="code"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="ABC123"
+              />
+              <button type="submit" data-action="join">Enter</button>
+            </div>
+          </form>
+          <p class="hint">Got a link? Open it — you land in the room.</p>
+        </section>
 
-        <form data-form="create">
-          <h2>Create a room</h2>
-          <label>Title <input data-input="create-title" name="title" autocomplete="off" /></label>
-          <label>
-            Passcode (optional)
-            <input data-input="create-passcode" name="passcode" autocomplete="off" />
-          </label>
-          <label><input type="checkbox" data-input="create-public" checked /> Public (findable)</label>
-          <button type="submit" data-action="create">Create room</button>
-        </form>
+        <!-- POKER-017 (D2-A): Create is a disclosure, not a second form. -->
+        <details class="disclosure" data-create-disclosure>
+          <summary data-action="toggle-create">Create a room</summary>
+          <form data-form="create">
+            <label>Title <input data-input="create-title" name="title" autocomplete="off" /></label>
+            <label>
+              Passcode (optional)
+              <input data-input="create-passcode" name="passcode" autocomplete="off" />
+            </label>
+            <label><input type="checkbox" data-input="create-public" checked /> Public (findable)</label>
+            <button type="submit" data-action="create">Create room</button>
+          </form>
+        </details>
 
         <section data-section="find">
           <div
-            class="banner"
+            class="banner banner--text"
             data-banner
             data-banner-text="ROOMS"
             data-banner-mode="full"
@@ -77,7 +95,7 @@
             <pre class="banner-pre" data-banner-pre aria-hidden="true"></pre>
             <p class="banner-compact" data-banner-compact aria-hidden="true"></p>
           </div>
-          <h2>Find rooms</h2>
+          <h2 class="visually-hidden">Find rooms</h2>
           <button type="button" data-action="find-rooms">Find rooms</button>
           <p class="empty" data-empty="rooms">No public rooms yet — create one.</p>
           <ul data-rooms data-rooms-state="idle"></ul>
@@ -85,7 +103,7 @@
 
         <section data-section="my-rooms">
           <div
-            class="banner"
+            class="banner banner--text"
             data-banner
             data-banner-text="MY ROOMS"
             data-banner-mode="full"
@@ -95,7 +113,7 @@
             <pre class="banner-pre" data-banner-pre aria-hidden="true"></pre>
             <p class="banner-compact" data-banner-compact aria-hidden="true"></p>
           </div>
-          <h2>My rooms</h2>
+          <h2 class="visually-hidden">My rooms</h2>
           <!-- [data-my-rooms] items carry data-my-room-code + data-last-visit, most-recent-first. -->
           <p class="empty" data-empty="my-rooms">No rooms visited in this browser yet.</p>
           <ul data-my-rooms data-my-rooms-state="empty"></ul>
@@ -103,15 +121,34 @@
       </section>
 
       <!-- =============================== ROOM =============================== -->
-      <section data-panel="room" hidden>
+      <section data-panel="room" data-room-state="connecting" hidden>
         <p class="room-bar">
           <button type="button" data-action="home">Back</button>
-          Room <strong data-room-code></strong> — <span data-room-title></span>
+          <span class="room-ident">
+            <span class="wordmark" aria-hidden="true">poker</span> ›
+            <strong data-room-code></strong>
+          </span>
+          <!-- Kept for assistive tech and the landed hook vocabulary; the room
+               banner below renders the same title as whisper text. -->
+          <span class="visually-hidden" data-room-title></span>
         </p>
 
-        <!-- The room-title banner (AC4): generated from the room's own title. -->
+        <!-- POKER-017 (D3-c): the invite link, with the passcode strictly opt-in. -->
+        <p class="share" data-share hidden>
+          <label class="visually-hidden" for="poker-invite-url">Invite link</label>
+          <input id="poker-invite-url" data-invite-url readonly />
+          <button type="button" data-action="copy-invite-link">Copy</button>
+          <label class="share-passcode" data-share-passcode hidden>
+            <input type="checkbox" data-input="invite-include-passcode" /> include passcode
+          </label>
+        </p>
+
+        <!-- The room-title banner (001e AC4): generated from the room's own text.
+             POKER-017 (D1-B): the header carries no block art inside a room, and
+             this title is whispered rather than shouted (small + muted). It stays
+             a five-row <pre>, so the 480px fold and its reversal are unchanged. -->
         <div
-          class="banner"
+          class="banner banner--room banner--whisper"
           data-banner
           data-banner-text="ROOM"
           data-banner-mode="full"
@@ -123,13 +160,23 @@
           <p class="banner-compact" data-banner-compact aria-hidden="true"></p>
         </div>
 
-        <!-- Only needed when a passcode-protected room refused admission. -->
-        <form data-form="retry-join" hidden>
-          <label>
-            Passcode <input data-input="room-passcode" type="password" autocomplete="off" />
-          </label>
-          <button type="submit" data-action="retry-join">Join room</button>
-        </form>
+        <!--
+          POKER-017 (D3): the gate. The passcode is asked HERE — on the room the
+          link points at — and only after the server refused admission, so a
+          visitor is never asked for a passcode a room does not have. app.js moves
+          the single `[data-error]` alert node in here while gated, so the message
+          sits next to the field it is about.
+        -->
+        <div class="gate" data-gate hidden>
+          <h2>This room is protected</h2>
+          <p class="hint">Ask whoever invited you for the passcode.</p>
+          <form data-form="retry-join">
+            <label>
+              Passcode <input data-input="room-passcode" type="password" autocomplete="off" />
+            </label>
+            <button type="submit" data-action="retry-join">Enter</button>
+          </form>
+        </div>
 
         <!-- POKER-007: shown to admitted members so they can share it. -->
         <p class="room-passcode" data-room-passcode-line hidden>
@@ -194,7 +241,7 @@
 
         <section data-section="history">
           <div
-            class="banner"
+            class="banner banner--text"
             data-banner
             data-banner-text="HISTORY"
             data-banner-mode="full"
@@ -204,7 +251,7 @@
             <pre class="banner-pre" data-banner-pre aria-hidden="true"></pre>
             <p class="banner-compact" data-banner-compact aria-hidden="true"></p>
           </div>
-          <h2>History</h2>
+          <h2 class="visually-hidden">History</h2>
           <button type="button" data-action="load-history">Load history</button>
           <!-- [data-history-vote] items carry data-history-vote-id + data-history-state. -->
           <p class="empty" data-empty="history">History not loaded yet.</p>

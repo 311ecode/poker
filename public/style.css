@@ -171,6 +171,61 @@ body {
   text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
+/* POKER-017 (D1-B): the five-row block art is the hero, once — on Home — and
+ * whispers everywhere else.
+ *
+ *   .banner--text  swaps the block art for the single-row letterspaced
+ *                  treatment at EVERY width. That is a style choice, not a
+ *                  breakpoint: `data-banner-mode` keeps mirroring the 480px fold
+ *                  above, and app.js is untouched by this class.
+ *
+ * The room screen shows its title as whisper text rather than a five-row panel,
+ * and the site header carries no block art at all inside a room (the room-bar is
+ * the plain identity line there). The per-vote and reveal banners are content,
+ * not chrome, and keep their art.
+ */
+.site-header .banner {
+  margin: 0.1rem 0 0.4rem;
+}
+
+.site-header .banner-pre {
+  font-size: clamp(0.4rem, 1.15vw, 0.7rem);
+  color: var(--muted);
+  text-shadow: none;
+}
+
+body[data-view="room"] .site-header .banner {
+  display: none;
+}
+
+.banner--text .banner-pre {
+  display: none;
+}
+
+.banner--text .banner-compact {
+  display: block;
+  font-size: 0.82rem;
+  letter-spacing: 0.3em;
+  color: var(--muted);
+}
+
+.banner--room {
+  margin: 0.1rem 0 0.6rem;
+}
+
+.banner--room .banner-compact {
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+/* The room title keeps its five-row <pre> — the 480px fold must stay reversible
+ * (AC9) — but is whispered: small and muted rather than the hero it is on Home. */
+.banner--whisper .banner-pre {
+  font-size: clamp(0.32rem, 0.85vw, 0.5rem);
+  color: var(--muted);
+  text-shadow: none;
+}
+
 /* ------------------------------------------------------------------ layout */
 
 main {
@@ -223,6 +278,105 @@ h3 {
 .room-bar strong {
   color: var(--text);
   font-family: var(--mono);
+}
+
+.room-ident {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: baseline;
+}
+
+.room-ident .wordmark {
+  color: var(--muted);
+  font-family: var(--mono);
+  letter-spacing: 0.18em;
+}
+
+/* POKER-017 (D2-A): the one-field door on Home. */
+.enter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.enter-row input {
+  width: auto;
+  min-width: 10rem;
+  max-width: 16rem;
+  margin-top: 0;
+  font-family: var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* POKER-017 (D2-A): Create is a disclosure, not a second form on first paint. */
+.disclosure {
+  margin: 1.25rem 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.disclosure > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.disclosure[open] > summary {
+  margin-bottom: 0.6rem;
+}
+
+/* POKER-017 (D3): the passcode gate — asked on the room, where it is actionable. */
+.gate {
+  max-width: 32rem;
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.gate h2 {
+  color: var(--text);
+}
+
+.gate .alert {
+  margin-top: 0;
+  margin-bottom: 0.6rem;
+}
+
+/* POKER-017 (D3-c): invite link, code-only by default, passcode strictly opt-in. */
+.share {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.share input[data-invite-url] {
+  width: auto;
+  min-width: 14rem;
+  max-width: 100%;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.share-passcode {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: 0.85rem;
 }
 
 code,

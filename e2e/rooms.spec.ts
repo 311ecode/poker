@@ -16,7 +16,12 @@ const summary = (page: Page, code: string): Locator =>
   page.locator(`[data-room-summary][data-room-summary-code="${code}"]`);
 
 async function createViaUi(page: Page, title: string, passcode = ""): Promise<string> {
-  await page.locator('[data-input="create-title"]').fill(title);
+  // POKER-017 (D2-A): Create is a disclosure on Home — open it before filling.
+  const titleInput = page.locator('[data-input="create-title"]');
+  if (!(await titleInput.isVisible())) {
+    await page.locator('[data-action="toggle-create"]').click();
+  }
+  await titleInput.fill(title);
   await page.locator('[data-input="create-passcode"]').fill(passcode);
   await page.locator('[data-action="create"]').click();
   await expect(page.locator('[data-panel="room"]')).toBeVisible();

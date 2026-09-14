@@ -19,6 +19,7 @@ import { messageFor } from "./messages.js";
 import { openVoteViolations } from "./leakguard.js";
 import {
   ensureSession,
+  forgetPasscode,
   memoryStorage,
   readMyRooms,
   readName,
@@ -110,11 +111,19 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 const els = {
   body: document.body,
+  header: $("header.site-header"),
   homePanel: $('[data-panel="home"]'),
   roomPanel: $('[data-panel="room"]'),
   connection: $("[data-connection]"),
   connectionLine: $("[data-connection-line]"),
   error: $("[data-error]"),
+  gate: $("[data-gate]"),
+  gateForm: $('[data-form="retry-join"]'),
+  share: $("[data-share]"),
+  sharePasscode: $("[data-share-passcode]"),
+  inviteUrl: $("[data-invite-url]"),
+  inviteIncludePasscode: $('[data-input="invite-include-passcode"]'),
+  roomSections: $$('[data-panel="room"] section[data-section]'),
   roomCode: $("[data-room-code]"),
   roomTitle: $("[data-room-title]"),
   roomBanner: $("[data-room-banner]"),
@@ -125,7 +134,6 @@ const els = {
   passcodeValue: $("[data-room-passcode]"),
   claimSlot: $("[data-claim-slot]"),
   claimForm: $('[data-form="claim"]'),
-  retryForm: $('[data-form="retry-join"]'),
   openVoteForm: $('[data-form="open-vote"]'),
   needName: $("[data-need-name]"),
   members: $("[data-members]"),
@@ -139,7 +147,6 @@ const els = {
   emptyVotes: $('[data-empty="votes"]'),
   emptyHistory: $('[data-empty="history"]'),
   joinCode: $('[data-input="join-code"]'),
-  joinPasscode: $('[data-input="join-passcode"]'),
   createTitle: $('[data-input="create-title"]'),
   createPasscode: $('[data-input="create-passcode"]'),
   createPublic: $('[data-input="create-public"]'),
@@ -485,6 +492,10 @@ function showError(code) {
   els.error.setAttribute("data-error", code);
   els.error.textContent = messageFor(code);
   els.error.hidden = false;
+  // POKER-017 (D3 extras): never keep retrying a passcode the server just
+  // refused — it was either stale (a rotated passcode) or mistyped, and the gate
+  // is right there to ask again.
+  if (code === "bad_passcode" && state.roomCode) forgetPasscode(storage, state.roomCode);
   renderChrome();
   if (state.historyStatus === "loading") {
     state.historyStatus = "error";
@@ -524,7 +535,11 @@ function applyRoute() {
   if (route.name === "room") {
     const changed = state.roomCode !== route.code;
     state.roomCode = route.code;
-    state.passcode = route.passcode ?? "";
+    // POKER-017 (D3 extras): a passcode-less link must not re-prompt a browser
+    // that was already admitted here. The accepted passcode is remembered per
+    // room (POKER-007's store), so a refresh or a re-open goes straight in; a
+    // stale one is dropped the moment the server refuses it (see showError).
+    state.passcode = route.passcode || readPasscode(storage, route.code) || "";
     state.room = changed ? null : state.room;
     if (changed) {
       state.votes = new Map();
@@ -577,6 +592,79 @@ function renderAll() {
   renderHistory();
 }
 
+/**
+ * POKER-017 (D3): where a room screen is in the entry flow.
+ *   connecting — hello sent, not admitted yet, no refusal
+ *   gate       — refused for a passcode: the gate is the only thing on screen
+ *   missing    — no such room: the header alert carries it, no room furniture
+ *   live       — admitted: the real room
+ *   home       — not a room at all
+ */
+function roomState() {
+  if (state.route.name !== "room") return "home";
+  if (state.room) return "live";
+  if (state.error === "bad_passcode") return "gate";
+  if (state.error === "bad_room") return "missing";
+  return "connecting";
+}
+
+/**
+ * POKER-017: the invite link (D3-c). Code-only by default — the passcode is a
+ * shared secret and a URL is written to browser history — and includable only
+ * when the sharer ticks the box. The URL is built from `origin`, so it is right
+ * on every host (localhost, the tunnel, a test port).
+ */
+function inviteUrl() {
+  if (!state.roomCode) return "";
+  const includable = els.inviteIncludePasscode?.checked === true;
+  const passcode = includable ? readPasscode(storage, state.roomCode) : "";
+  const query = passcode ? `?passcode=${encodeURIComponent(passcode)}` : "";
+  return `${window.location.origin}/#/room/${state.roomCode}${query}`;
+}
+
+/**
+ * POKER-017: the entry flow around a room — gate, invite line, and the one
+ * `[data-error]` alert node placed next to the field it is about. Presentation of
+ * existing state only: no protocol, and the anonymity rules are untouched.
+ * Returns the room state name (see `roomState`).
+ */
+function renderEntryFlow() {
+  const inRoom = state.route.name === "room";
+  const view = roomState();
+  const admitted = view === "live";
+  const gated = view === "gate";
+  const bare = inRoom && !admitted;
+
+  els.roomPanel.setAttribute("data-room-state", view);
+  if (els.gate) els.gate.hidden = !gated;
+  // A visitor who has not been admitted sees the gate, not the room's furniture.
+  for (const section of els.roomSections) section.hidden = bare;
+  if (els.roomBanner) els.roomBanner.hidden = bare;
+  // The invite link is an admitted member's tool.
+  if (els.share) els.share.hidden = !admitted;
+  if (els.inviteUrl && admitted) els.inviteUrl.value = inviteUrl();
+  const knownPasscode = admitted && state.roomCode ? readPasscode(storage, state.roomCode) : "";
+  if (els.sharePasscode) els.sharePasscode.hidden = knownPasscode === "";
+  // One alert node, where it is actionable: inside the gate while gated, in the
+  // header everywhere else (POKER-015's placement).
+  if (els.error) {
+    const host = gated ? els.gate : els.header;
+    if (els.error.parentElement !== host) {
+      if (gated && els.gateForm) els.gate.insertBefore(els.error, els.gateForm);
+      else els.header?.append(els.error);
+    }
+  }
+  // D3 extras: the cursor starts where the visitor must type. Never steal focus
+  // from a control they already reached, and never pop the mobile keyboard on
+  // Home (the gate is exempt — typing there is the whole job).
+  const target = gated ? els.roomPasscode : view === "home" ? els.joinCode : null;
+  const welcome = gated || (view === "home" && !compactQuery.matches);
+  if (target && welcome && document.activeElement === els.body) {
+    target.focus({ preventScroll: true });
+  }
+  return view;
+}
+
 function renderRoute() {
   const inRoom = state.route.name === "room";
   els.body.setAttribute("data-view", inRoom ? "room" : "home");
@@ -606,9 +694,13 @@ function renderYou() {
  */
 function renderChrome() {
   const inRoom = state.route.name === "room";
+  const view = renderEntryFlow();
+  const admitted = view === "live";
   const named = (state.you.name ?? "") !== "";
   const storedName = readName(storage).trim();
-  const claimable = inRoom && !named && (storedName === "" || state.claimRejected);
+  // POKER-017: before admission a visitor is not in the room, so the room's own
+  // controls (claim) are not on offer — the gate is the only path.
+  const claimable = inRoom && admitted && !named && (storedName === "" || state.claimRejected);
 
   if (els.claimForm && els.claimSlot) {
     if (claimable) {
@@ -626,13 +718,12 @@ function renderChrome() {
     }
   }
   if (els.youLine) els.youLine.hidden = !inRoom || !named;
-  if (els.retryForm) els.retryForm.hidden = !inRoom || state.error !== "bad_passcode";
   if (els.openVoteForm) els.openVoteForm.hidden = !inRoom || !named;
   if (els.needName) els.needName.hidden = !inRoom || named || !claimable;
 
   // POKER-007: the room's passcode, for admitted members only (it is this
   // browser's own copy — the server never sends a passcode).
-  const roomPasscode = inRoom && state.roomCode ? readPasscode(storage, state.roomCode) : "";
+  const roomPasscode = admitted && state.roomCode ? readPasscode(storage, state.roomCode) : "";
   if (els.passcodeLine) els.passcodeLine.hidden = roomPasscode === "";
   if (els.passcodeValue && roomPasscode !== "") els.passcodeValue.textContent = roomPasscode;
 }
@@ -1069,7 +1160,13 @@ function castVote(voteId, choice) {
 $('[data-form="join"]').addEventListener("submit", (event) => {
   event.preventDefault();
   const code = els.joinCode.value.trim().toUpperCase();
-  goToRoom(code, els.joinPasscode.value);
+  // POKER-017 (D2-A): Home carries no passcode field. An empty code is a no-op
+  // (the cursor is already in the field); a protected room answers at the gate.
+  if (code === "") {
+    els.joinCode.focus({ preventScroll: true });
+    return;
+  }
+  goToRoom(code);
 });
 
 $('[data-form="create"]').addEventListener("submit", (event) => {
@@ -1100,6 +1197,33 @@ $('[data-action="copy-passcode"]').addEventListener("click", async (event) => {
     // Clipboard can be unavailable (permissions/insecure context) — the code is
     // on screen to read, so a failed copy is not worth an error banner.
   }
+});
+
+// POKER-017 (D3-c): copy the room's invite link. Code-only by default; the
+// passcode is appended only while the "include passcode" box is ticked, so a
+// shared secret never lands in a URL by accident.
+$('[data-action="copy-invite-link"]').addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const url = inviteUrl();
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    button.textContent = "Copied";
+    setTimeout(() => {
+      button.textContent = "Copy";
+    }, 1500);
+  } catch {
+    // Clipboard can be unavailable (permissions/insecure context): the link is
+    // in the readonly field next to the button, so select it for a manual copy.
+    if (els.inviteUrl) {
+      els.inviteUrl.focus();
+      els.inviteUrl.select();
+    }
+  }
+});
+
+$('[data-input="invite-include-passcode"]').addEventListener("change", () => {
+  if (els.inviteUrl) els.inviteUrl.value = inviteUrl();
 });
 
 $('[data-form="claim"]').addEventListener("submit", (event) => {

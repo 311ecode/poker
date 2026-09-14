@@ -161,12 +161,21 @@ export async function connectRoom(
   return { page, frames, navigations };
 }
 
-/** Join a room through the home form (in-app routing, no reload). */
+/**
+ * Join a room through the home form (in-app routing, no reload).
+ *
+ * POKER-017 (D2-A): Home has ONE field — the code. A protected room answers at
+ * the gate on the room screen, so a passcode is typed there, not up front.
+ */
 export async function joinViaForm(page: Page, code: string, passcode = ""): Promise<void> {
   await page.locator('[data-input="join-code"]').fill(code);
-  if (passcode) await page.locator('[data-input="join-passcode"]').fill(passcode);
   await page.locator('[data-action="join"]').click();
   await expect(page.locator('[data-panel="room"]')).toBeVisible();
+  if (passcode) {
+    await expectError(page, "bad_passcode");
+    await page.locator('[data-input="room-passcode"]').fill(passcode);
+    await page.locator('[data-action="retry-join"]').click();
+  }
   await expect(page.locator("[data-room-code]")).toHaveText(code);
   await expectConnection(page, "open");
 }
