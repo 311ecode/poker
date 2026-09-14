@@ -3,7 +3,7 @@
 **Project:** poker (main) · **Created:** 2026-09-13
 **Reporter:** coordinator, while verifying POKER-015 — user asked to *"check it on the playwright tests
 or so and act accordingly"* before believing a flake claim.
-**Status:** **IN PROGRESS**
+**Status:** **DONE** (2026-09-13) — landed on `main` (`dc02664`), pushed.
 
 ## 0. How this started: a ~17% flake
 
@@ -68,7 +68,7 @@ POKER-011's guarantee silently did not hold for concurrent broadcasts.
       the same vote's select) and no longer fails on a detached node.
 - [x] AC4 — Full suite green across **10 consecutive** runs (33 passed each, 0 failures); the baseline
       was 3 failures in 18 runs on a single test.
-- [ ] AC5 — `npm test` green; ticket committed, pushed, moved to `tickets/done/`.
+- [x] AC5 — `npm test` green; ticket committed, pushed, moved to `tickets/done/`.
 
 ## 4. Verification
 
