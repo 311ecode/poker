@@ -95,6 +95,9 @@ pass by only testing what is painted.
 
 ## Ticket workflow (mandatory)
 
+Shared discipline — file it before you start, one topic per ticket, the states,
+and "a branch is not a landing": [`../rules/tickets.md`](../rules/tickets.md).
+Poker's own:
 - **Every request gets a ticket. Always.** Never implement without one.
 - Tickets live in **`tickets/{new,done}/`** in **this** repo, named
   **`POKER-<NNN>-<kebab-slug>.md`** (sub-tickets: `POKER-001a-…`). `new/` = open, `done/` = landed
@@ -103,10 +106,11 @@ pass by only testing what is painted.
   sub-tickets (`001a`–`001f`) are the work. Read the parent first — it replaces exploration.
 - A ticket is **done** only when its acceptance criteria are ticked, its tests pass, and the work
   is **committed and pushed**. Then move it with `git mv` to `tickets/done/`.
-- **Parallel slices:** one sub-ticket = one git worktree (`~/dev/poker-a-work`, …) + own branch +
-  own test port. **Subagents never write this main checkout** — work lands here, and a second writer
-  destroys untracked work. The coordinator reviews the diff, runs the tests itself, and lands each
-  slice immediately (never batching).
+- **Parallel slices:** [`../rules/agents.md`](../rules/agents.md) — one sub-ticket
+  = one worktree + branch + own test port; **subagents never write this main
+  checkout**; the coordinator reviews the diff, runs the tests itself, and lands
+  each slice immediately, never batching. Poker's worktrees live at
+  `~/dev/poker-<slice>-work`.
 - **Scale the ceremony to the change.** A wording fix does not need a fleet rollout; a protocol
   change touches every consumer.
 
@@ -151,12 +155,10 @@ Same shape as `offtube`/`earthandfire`: **user systemd → PM2 → `node server.
 
 ## Git push (Tailscale SSH agent workaround)
 
-Tailscale SSH provisions `~/.ssh/id_ed25519` but its agent refuses to sign outbound connections.
-Always bypass it:
-
-```bash
-GIT_SSH_COMMAND="SSH_AUTH_SOCK= ssh -F /dev/null -i ~/.ssh/id_ed25519" git push
-```
+[`../rules/git.md`](../rules/git.md) — the
+`SSH_AUTH_SOCK= ssh -F /dev/null -i ~/.ssh/id_ed25519` bypass, the deployment key
+invariant, and the plaintext token seams. Shared rules for every project:
+[`../rules/`](../rules/README.md).
 
 ## Secrets
 
