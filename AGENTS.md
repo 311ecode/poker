@@ -61,8 +61,8 @@ reconcile, no per-env slice.** Work is tracked as **`POKER-…`** tickets in thi
 I live in `~/dev/` with other projects — `menu`, `menu-dashboard` (`DASH-…` tickets), `offtube`,
 `earthandfire`, `opencode`. Each folder is its own git repo with its own remote — **commit changes
 to the repo they belong to, never mix repos in one commit.** This repo is
-`git@github.com:311ecode/poker.git`, branch **`main`**. The fleet router is `~/dev/agent.md`
-(`dev-meta`); the fleet descriptor/catalog lives in `menu/infrastructure/inventory/` — a change
+`git@github.com:311ecode/poker.git`, branch **`main`**. The fleet router is `~/dev/AGENTS.md`
+and the shared rules are `~/dev/rules/` (`dev-meta`); the fleet descriptor/catalog lives in `menu/infrastructure/inventory/` — a change
 there belongs to the **menu** repo, even when it is about poker (POKER-001f).
 
 ## Stack (verify, do not change)
